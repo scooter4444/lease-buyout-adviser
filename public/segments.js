@@ -73,13 +73,35 @@ export function segmentFor({ make, model, body }) {
   return 'midsize-2row';
 }
 
-// Up to `n` comparable models, preferring the same brand's natural replacement first.
-export function suggestComparables(current, n = 6) {
+// Suggested models with a reason for each, best first:
+// the same brand's closest replacements, then same-size rivals, then a step down in size.
+const STEP_DOWN = {
+  'midsize-2row': 'compact-suv', 'midsize-3row': 'midsize-2row', 'fullsize-suv': 'midsize-3row',
+  'luxury-suv': 'compact-lux-suv', 'fullsize-pickup': 'midsize-pickup', 'midsize-sedan': 'compact-car',
+};
+const HYBRIDS = { 'Toyota|RAV4': 'Hybrid model available', 'Honda|CR-V': 'Hybrid model available', 'Ford|Maverick': 'Hybrid model available', 'Toyota|Highlander': 'Hybrid model available', 'Kia|Sorento': 'Hybrid model available', 'Hyundai|Santa Fe': 'Hybrid model available', 'Toyota|Camry': 'Hybrid only', 'Honda|Accord': 'Hybrid model available', 'Toyota|Sequoia': 'Hybrid only', 'Toyota|Tundra': 'Hybrid model available' };
+
+export function suggestions(current, n = 10) {
   const seg = segmentFor(current);
-  const list = SEGMENTS[seg].models.filter(([mk, md]) => !(norm(mk) === norm(current.make) && norm(md) === norm(current.model)));
-  const sameBrand = list.filter(([mk]) => norm(mk) === norm(current.make));
-  const others = list.filter(([mk]) => norm(mk) !== norm(current.make));
-  return { segment: seg, label: SEGMENTS[seg].label, models: [...sameBrand.slice(0, 2), ...others].slice(0, n) };
+  const same = (mk, md) => norm(mk) === norm(current.make) && norm(md) === norm(current.model);
+  const out = [];
+  const add = (mk, md, reason) => {
+    if (same(mk, md) || out.some((x) => norm(x.make) === norm(mk) && norm(x.model) === norm(md))) return;
+    const extra = HYBRIDS[`${mk}|${md}`];
+    out.push({ make: mk, model: md, reason: extra ? `${reason}. ${extra}` : reason });
+  };
+  const list = SEGMENTS[seg].models;
+  for (const [mk, md] of list) if (norm(mk) === norm(current.make)) add(mk, md, `${mk}’s closest replacement`);
+  for (const [mk, md] of list) add(mk, md, `Same size as your ${current.model || 'car'}`);
+  const down = STEP_DOWN[seg];
+  if (down) for (const [mk, md] of SEGMENTS[down].models.slice(0, 3)) add(mk, md, 'A size smaller, costs less');
+  return { segment: seg, label: SEGMENTS[seg].label, items: out.slice(0, n) };
+}
+
+// Up to `n` comparable models (make/model pairs), kept for older callers.
+export function suggestComparables(current, n = 6) {
+  const s = suggestions(current, n);
+  return { segment: s.segment, label: s.label, models: s.items.map((x) => [x.make, x.model]) };
 }
 
 // Brands whose new cars get Ford A/Z-Plan pricing.

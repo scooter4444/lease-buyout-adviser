@@ -7,6 +7,7 @@ import {
   lookupVehicle, newCarMarket, incentives, autodevTco, autodevApr, plateToVin, photoFor, configured, ProviderError,
 } from './providers.js';
 import { usageThisMonth, cacheDir } from './cache.js';
+import { ask, askConfigured } from './ask.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -46,7 +47,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/status', (_req, res) => {
   const usage = usageThisMonth();
   res.json({
-    providers: configured(),
+    providers: { ...configured(), ask: askConfigured() },
     usage,
     limits: { marketcheck: Number(process.env.MARKETCHECK_MONTHLY_LIMIT || 500), autodev: Number(process.env.AUTODEV_MONTHLY_LIMIT || 1000) },
   });
@@ -57,6 +58,9 @@ app.get('/api/plate', wrap((req) => plateToVin({ state: req.query.state, plate: 
 app.get('/api/new-market', wrap((req) => newCarMarket(req.query)));
 app.get('/api/incentives', wrap((req) => incentives(req.query)));
 app.get('/api/photo', wrap((req) => photoFor(req.query)));
+app.post('/api/ask', async (req, res) => {
+  try { res.json(await ask(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
 app.get('/api/autodev/tco/:vin', wrap((req) => autodevTco({ vin: req.params.vin, zip: req.query.zip })));
 app.get('/api/autodev/apr/:vin', wrap((req) => autodevApr({ vin: req.params.vin, ...req.query })));
 

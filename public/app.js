@@ -866,11 +866,12 @@ function addComparables() {
 
 // ---------- Tabs ----------
 const wide = () => window.matchMedia('(min-width: 980px)').matches;
-function setTab(t) {
+function setTab(t, { scroll = true } = {}) {
   if (wide() && t === 'verdict') t = 'car';
+  const changed = document.body.dataset.tab !== t;
   document.body.dataset.tab = t;
   for (const b of $$('.tabs [role="tab"]')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
-  if (!wide()) window.scrollTo({ top: 0 });
+  if (scroll && changed && !wide()) window.scrollTo({ top: 0 });
   if (t === 'models') renderModels();
 }
 
@@ -970,7 +971,19 @@ function renderAll() {
 }
 
 let resizeTimer;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { renderResults(); updateModelSummaries(); setTab(document.body.dataset.tab); }, 200); });
+// iOS Safari fires resize when its toolbar shows/hides during scroll: only react to real width changes,
+// and never scroll the page from here.
+let lastWidth = window.innerWidth;
+window.addEventListener('resize', () => {
+  if (Math.abs(window.innerWidth - lastWidth) < 2) return;
+  const wasWide = lastWidth >= 980;
+  lastWidth = window.innerWidth;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    renderResults(); updateModelSummaries();
+    if (wasWide !== wide()) setTab(document.body.dataset.tab, { scroll: false });
+  }, 200);
+});
 
 // ---------- Boot ----------
 (async function boot() {
