@@ -304,6 +304,7 @@ function mapOffer(x) {
     body: o.vehicles?.[0]?.body_type ?? null,
     fuel: o.vehicles?.[0]?.fuel_type ?? null,
     city: x.city || null,
+    state: x.state || null,
     type: o.offer_type,
     title: o.titles?.[0] || o.oem_program_name || '',
     vehicles: (o.vehicles || []).map((v) => [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ')),

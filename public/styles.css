@@ -625,3 +625,13 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
 #eligOwned { min-height: 48px; }
 .offer.no { opacity: 0.6; border-style: dashed; }
 .offer.no[aria-pressed="true"] { opacity: 1; }
+
+.set-two { display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem; gap: 0 12px; }
+
+.place-t { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; margin-top: 8px; }
+.place-t th, .place-t td { text-align: left; padding: 10px 8px 10px 0; border-bottom: 1px solid var(--hair); vertical-align: top; font-weight: 400; }
+.place-t thead th { font-size: 0.74rem; color: var(--muted); font-weight: 500; }
+.place-t tbody th { font-weight: 600; }
+.place-t small { display: block; color: var(--muted); font-size: 0.74rem; font-weight: 400; margin-top: 2px; }
+.place-t td b { font-size: 1.05rem; font-weight: 600; }
+.place-t tr.home th small:first-of-type { color: var(--ink, #14213D); }

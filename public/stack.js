@@ -170,12 +170,27 @@ function conflicts(a, b) {
 
 // Best legal stack of cash offers.
 // opts: { elig, make, mode: 'cash'|'finance'|'lease', specialApr: bool (finance at a promo rate, or a factory lease deal), azActive: bool, year }
+// Domestic brands tie offers to where the buyer lives ("Residency restrictions apply"); most
+// import brands key offers to the selling dealer's region ("regardless of buyer's residency").
+export const RESIDENCE_MAKES = new Set(['ford', 'lincoln', 'chevrolet', 'gmc', 'buick', 'cadillac', 'jeep', 'ram', 'dodge', 'chrysler']);
+export function regionOk(o, make, home) {
+  if (!o.region || !home?.zip || o.region === home.zip) return { ok: true };
+  const m = normMake(o.make || make);
+  if (RESIDENCE_MAKES.has(m) || /residency restrictions apply|must reside|residents of/i.test(String(o.text || o.disclaimer || '')))
+    return { ok: false, why: `${cap(m)} offers go by where you live${home.st ? ` (${home.st})` : ''}` };
+  return { ok: true };
+}
+
 export function bestStack(offers, opts) {
-  const { elig = {}, make, mode = 'finance', specialApr = false, azActive = false, year = null } = opts;
+  const { elig = {}, make, mode = 'finance', specialApr = false, azActive = false, year = null, region = null, home = null } = opts;
   const pool = [];
   const blocked = [];
   for (const o of offers || []) {
     if (offerKind(o) !== 'cash' || !(o.cashback > 0)) continue;
+    // One stack comes from one market: offers listed for another region are skipped, not blocked.
+    if (region && o.region && o.region !== region) continue;
+    const ro = regionOk(o, make, home);
+    if (!ro.ok) { blocked.push({ id: o.id, why: ro.why }); continue; }
     const cls = classify({ ...o, make: o.make || make });
     const oy = Number(o.year) || Number(String(o.vehicles?.[0] || '').match(/^(20\d\d)\b/)?.[1]) || null;
     if (year && oy && oy !== year) continue;

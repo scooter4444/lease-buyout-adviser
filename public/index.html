@@ -163,6 +163,15 @@
     <label class="field check set-row"><input type="checkbox" id="setRunning"><span>Include gas, insurance and upkeep<small>Off: just what you pay for the car itself.</small></span></label>
     <label class="field set-row"><span>Miles you drive a year</span><span class="input has-suf"><input id="setMiles" inputmode="numeric"><span class="suf">mi</span></span></label>
     <label class="field set-row" id="setRateRow"><span>Interest your money could earn</span><span class="input has-suf"><input id="setRate" inputmode="decimal"><span class="suf">%</span></span><small>Used only for Cost of owning, to weigh money paid now against money paid later.</small></label>
+    <h3 class="set-h">Where</h3>
+    <p class="hint">Taxes and Ford, Lincoln, GM and Stellantis offers go by where the car is registered. Most other brands price by the selling dealer’s region, so other places can have better deals.</p>
+    <div class="set-two">
+      <label class="field set-row"><span>Home ZIP</span><input id="setZip" inputmode="numeric" maxlength="5"></label>
+      <label class="field set-row"><span>Registered in</span><select id="setState"></select></label>
+    </div>
+    <label class="field set-row"><span>Also check offers near</span><input id="setShopZips" inputmode="numeric" placeholder="e.g. 48302, 80129"><small>ZIPs, separated by commas. One per metro is enough.</small></label>
+    <button type="button" class="btn block" id="setReprice">Check offers in these places</button>
+    <p class="hint" id="setWhereNote"></p>
     <h3 class="set-h">Who’s buying</h3>
     <p class="hint">Used to find loyalty, conquest, lease-renewal and group cash you qualify for.</p>
     <label class="field set-row"><span>Other cars the household owns or leases</span><input id="eligOwned" placeholder="e.g. Toyota, Cadillac"><small>Makes, separated by commas. The leased car is counted automatically.</small></label>

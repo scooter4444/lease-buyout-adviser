@@ -18,7 +18,39 @@ export const STATE_TAX = {
 };
 
 // States that do NOT reduce taxable price by trade-in value.
-export const NO_TRADE_TAX_CREDIT = new Set(['CA', 'HI', 'MD', 'MI', 'MT', 'VA', 'DC']);
+export const NO_TRADE_TAX_CREDIT = new Set(['CA', 'HI', 'MD', 'MT', 'VA', 'DC']);
+// Michigan phases its trade-in credit in: capped at $12,000 for 2026 (Treasury).
+export const TRADE_CREDIT_CAP = { MI: 12000 };
+
+// Tax and fee details that a flat rate misses, from each state's revenue/DMV guidance (Oct 2026):
+// - FL: 6% state + county surtax that applies only to the first $5,000 of a vehicle sale, but to
+//   every lease payment in full. Sarasota County (North Port, Venice) surtax is 1%.
+//   $225 initial registration when there's no Florida plate to transfer, ~$78 title.
+// - MI: flat 6%, no local tax; dealer doc fee capped at the lesser of $280 or 5% of price.
+// - CO: 2.9% state + local by the buyer's address, plus yearly Specific Ownership Tax.
+export const STATE_DETAIL = {
+  FL: { salesTaxPct: 6, surtaxPct: 1, surtaxCap: 5000, titleFees: 303, docFee: 999 },
+  MI: { salesTaxPct: 6, docFee: 280, titleFees: 30 },
+  CO: { docFee: 699, titleFees: 110 },
+};
+// Combined rates for specific ZIPs we've looked up. Highlands Ranch: 2.9 state + 1 Douglas County
+// + 1 RTD + 0.1 SCFD (Avalara, 2026).
+export const ZIP_TAX = {
+  80129: { salesTaxPct: 5.0 },
+  34286: { surtaxPct: 1 }, 34287: { surtaxPct: 1 }, 34288: { surtaxPct: 1 }, 34289: { surtaxPct: 1 }, 34290: { surtaxPct: 1 },
+  48302: { salesTaxPct: 6 }, 48009: { salesTaxPct: 6 },
+};
+export function taxDefaults(state, zip) {
+  const st = String(state || '').toUpperCase();
+  const d = { salesTaxPct: STATE_TAX[st] ?? 7, surtaxPct: 0, surtaxCap: 0, titleFees: 150, docFee: 499, ...(STATE_DETAIL[st] || {}), ...(ZIP_TAX[zip] || {}) };
+  d.leaseTaxPct = d.salesTaxPct + (d.surtaxCap ? d.surtaxPct : 0);
+  return d;
+}
+// Sales tax on a vehicle purchase, including a surtax that only applies up to a cap.
+export function vehicleSalesTax(taxable, a) {
+  const t = Math.max(0, taxable);
+  return t * (a.salesTaxPct / 100) + (a.surtaxCap ? Math.min(t, a.surtaxCap) * ((a.surtaxPct || 0) / 100) : 0);
+}
 
 export const LUXURY_MAKES = new Set([
   'acura', 'alfa romeo', 'aston martin', 'audi', 'bentley', 'bmw', 'cadillac', 'genesis',
@@ -70,7 +102,7 @@ export function defaultInsurance(value) {
 
 // Colorado specific ownership tax + typical registration fees (Class C).
 export function coloradoRegistration(msrp, yearOfService) {
-  const rates = [0.021, 0.015, 0.0125, 0.0075, 0.0045, 0.0045, 0.0045, 0.0045, 0.0045];
+  const rates = [0.021, 0.015, 0.012, 0.009, 0.0045, 0.0045, 0.0045, 0.0045, 0.0045];
   const y = Math.max(1, Math.round(yearOfService));
   const sot = y >= 10 ? 3 : 0.85 * msrp * rates[y - 1];
   return Math.round(sot + 110);
@@ -79,6 +111,11 @@ export function coloradoRegistration(msrp, yearOfService) {
 export function registrationAnnual({ state, msrp, ageYears, flat }) {
   if (flat !== undefined && flat !== null && flat !== '' && Number.isFinite(num(flat, NaN))) return num(flat);
   if (state === 'CO' && msrp > 0) return coloradoRegistration(msrp, Math.floor(ageYears) + 1);
+  if (state === 'FL') return 46; // 3,500 lb+ private auto, plus small county fees
+  if (state === 'MI' && msrp > 0) { // $178 + $6 per $1,000 over $30k, then 90% a year through the 4th renewal
+    const base = 178 + Math.max(0, Math.ceil((msrp - 30000) / 1000)) * 6;
+    return Math.round(base * Math.pow(0.9, Math.min(3, Math.max(0, Math.floor(ageYears)))));
+  }
   return 200;
 }
 
@@ -152,17 +189,21 @@ export function normalize(input = {}) {
   const today = input.today ? new Date(input.today) : new Date();
   const a = input.assumptions || {};
   const state = (a.state || '').toUpperCase();
+  const td = taxDefaults(state, a.zip);
   const assumptions = {
     zip: a.zip || '',
     state,
     horizonYears: clamp(num(a.horizonYears, 3), 1, 10),
     annualMiles: clamp(num(a.annualMiles, 12000), 1000, 60000),
-    salesTaxPct: num(a.salesTaxPct, STATE_TAX[state] ?? 7),
-    leaseTaxPct: num(a.leaseTaxPct, num(a.salesTaxPct, STATE_TAX[state] ?? 7)),
+    salesTaxPct: num(a.salesTaxPct, td.salesTaxPct),
+    surtaxPct: num(a.surtaxPct, td.surtaxPct),
+    surtaxCap: num(a.surtaxCap, td.surtaxCap),
+    leaseTaxPct: num(a.leaseTaxPct, a.salesTaxPct !== undefined && a.salesTaxPct !== '' ? num(a.salesTaxPct, td.salesTaxPct) : td.leaseTaxPct),
     tradeInTaxCredit: bool(a.tradeInTaxCredit, !NO_TRADE_TAX_CREDIT.has(state)),
     tradeInPct: clamp(num(a.tradeInPct, 90), 50, 105),
-    titleFees: num(a.titleFees, 150),
-    docFee: num(a.docFee, 499),
+    titleFees: num(a.titleFees, td.titleFees),
+    docFee: num(a.docFee, td.docFee),
+    tradeCreditCap: TRADE_CREDIT_CAP[state] ?? Infinity,
     gasPrice: num(a.gasPrice, 3.4),
     discountRatePct: clamp(num(a.discountRatePct, 4), 0, 20),
     // How the monthly figure is counted (Settings): 'payments' = what you pay over the period,
@@ -283,7 +324,7 @@ export function leaseExit(n) {
   const payoff = c.buyoutPrice + c.purchaseOptionFee;
   const tradeEquity = tradeValue - payoff;
   // Trading in also reduces the sales tax on the next purchase in most states.
-  const tradeTaxCredit = a.tradeInTaxCredit ? tradeValue * (a.salesTaxPct / 100) : 0;
+  const tradeTaxCredit = a.tradeInTaxCredit ? Math.min(tradeValue, a.tradeCreditCap) * (a.salesTaxPct / 100) : 0;
   const tradeBenefit = tradeEquity; // tax credit is applied inside the buy-new scenario
   const best = tradeBenefit > -returnCharges ? 'trade' : 'return';
   return {
@@ -433,7 +474,7 @@ export function buyoutScenario(n, H) {
   const { current: c, assumptions: a } = n;
   const flows = new Flows(H);
   const taxable = c.buyoutPrice + c.purchaseOptionFee;
-  const tax = c.buyoutIsTaxed ? taxable * (a.salesTaxPct / 100) : 0;
+  const tax = c.buyoutIsTaxed ? vehicleSalesTax(taxable, a) : 0;
   const taxesFees = tax + a.titleFees + c.purchaseOptionFee;
   const loan = finance(flows, {
     H, price: c.buyoutPrice, taxesFees, down: c.downPayment, payCash: c.payCash,
@@ -470,8 +511,8 @@ export function buyNewScenario(n, v, H, exit) {
   const { assumptions: a } = n;
   const flows = new Flows(H);
   const price = v.sellingPrice - v.buy.rebate;
-  const tradeCredit = exit.choice === 'trade' && a.tradeInTaxCredit ? exit.tradeValue : 0;
-  const tax = Math.max(0, price + a.docFee - tradeCredit) * (a.salesTaxPct / 100);
+  const tradeCredit = exit.choice === 'trade' && a.tradeInTaxCredit ? Math.min(exit.tradeValue, a.tradeCreditCap) : 0;
+  const tax = vehicleSalesTax(price + a.docFee - tradeCredit, a);
   const taxesFees = tax + a.docFee + a.titleFees;
   flows.add(0, -exit.cashAtExit, 'Current lease exit');
   const loan = finance(flows, {

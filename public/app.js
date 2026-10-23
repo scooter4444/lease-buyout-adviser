@@ -1,7 +1,7 @@
-import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
+import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, taxDefaults, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
 import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
 import { logoUrl, logoIsMono } from './logos.js';
-import { bestStack, classify, eligible } from './stack.js';
+import { bestStack, classify, eligible, regionOk } from './stack.js';
 
 // ---------- State ----------
 const STORAGE_KEY = 'lba:v2';
@@ -83,8 +83,8 @@ const FIELDS = {
     F('assumptions.tradeInPct', 'Dealer trade-in vs retail', { suf: '%', hint: 'Dealers usually pay 85–92% of retail' }),
   ],
   fine: [
-    F('assumptions.salesTaxPct', 'Sales tax', { suf: '%', est: () => STATE_TAX[state.assumptions.state] ?? 7, hint: 'Your combined state + local rate' }),
-    F('assumptions.leaseTaxPct', 'Tax on lease payments', { suf: '%', est: () => state.assumptions.salesTaxPct || (STATE_TAX[state.assumptions.state] ?? 7) }),
+    F('assumptions.salesTaxPct', 'Sales tax', { suf: '%', est: () => taxDefaults(state.assumptions.state, state.assumptions.zip).salesTaxPct, hint: () => taxHint() }),
+    F('assumptions.leaseTaxPct', 'Tax on lease payments', { suf: '%', est: () => state.assumptions.salesTaxPct || taxDefaults(state.assumptions.state, state.assumptions.zip).leaseTaxPct }),
     F('assumptions.docFee', 'Dealer doc fee', { pre: '$', placeholder: '499' }),
     F('assumptions.titleFees', 'Title & plate fees', { pre: '$', placeholder: '150' }),
     F('assumptions.discountRatePct', 'What your cash earns', { suf: '%', hint: 'Used to weigh money now vs later. 0 to ignore.' }),
@@ -92,6 +92,10 @@ const FIELDS = {
   ],
 };
 const STATES = Object.keys(STATE_TAX).sort();
+function taxHint() {
+  const d = taxDefaults(state.assumptions.state, state.assumptions.zip);
+  return d.surtaxCap ? `State rate. A ${d.surtaxPct}% county surtax is added on the first $${d.surtaxCap.toLocaleString()} of a purchase and on every lease payment.` : 'Your combined state + local rate';
+}
 
 // ---------- Helpers ----------
 const $ = (s, el = document) => el.querySelector(s);
@@ -140,7 +144,7 @@ function fieldHTML(f) {
       <input id="${id}" type="${type}" ${im ? `inputmode="${im}"` : ''} ${f.maxlength ? `maxlength="${f.maxlength}"` : ''} data-path="${f.path}" value="${esc(fmtInput(v))}" placeholder="${esc(ph)}">
       ${f.suf ? `<span class="suf">${f.suf}</span>` : ''}
     </span>
-    ${f.hint ? `<small>${esc(f.hint)}</small>` : ''}
+    ${f.hint ? `<small>${esc(typeof f.hint === "function" ? f.hint() : f.hint)}</small>` : ''}
   </label>`;
 }
 
@@ -178,10 +182,11 @@ function candidateHTML(c, i) {
     const main = kind === 'lease' ? `$${o.monthly}/mo for ${o.term || '?'} mo${o.dueAtSigning != null ? `, $${o.dueAtSigning.toLocaleString()} due` : ''}`
       : kind === 'finance' ? `${o.apr}% APR for ${o.term || '?'} mo` : `$${(o.cashback || 0).toLocaleString()} ${esc(cashLabel(o))}`;
     const pressed = kind === 'cash' ? sel.cash.includes(o.id) : sel[kind] === o.id;
-    let el = { ok: true, why: '' };
-    if (kind === 'cash') { try { el = eligible(o, classify({ ...o, make: c.make }), eligibilityOf(), c.make); } catch {} }
-    const who = kind !== 'cash' ? '' : el.ok ? (el.why && el.why !== 'Open to everyone' ? `You qualify: ${el.why}. ` : '') : `Not for you: ${el.why}. `;
-    return `<button type="button" class="offer ${el.ok ? '' : 'no'}" data-offer="${i}:${esc(o.id)}" aria-pressed="${pressed}">${main}<small>${esc(who)}${esc((o.title || o.vehicles?.[0] || '').slice(0, 60))}${o.validThrough ? `, ends ${esc(o.validThrough)}` : ''}</small></button>`;
+    let el = regionOk(o, c.make, homeOf());
+    if (el.ok && kind === 'cash') { try { el = eligible(o, classify({ ...o, make: c.make }), eligibilityOf(), c.make); } catch {} }
+    const who = el.ok ? (kind === 'cash' && el.why && el.why !== 'Open to everyone' ? `You qualify: ${el.why}. ` : '') : `Not for you: ${el.why}. `;
+    const mkt = multiRegion() && o.region ? `${regionName(o.region)}: ` : '';
+    return `<button type="button" class="offer ${el.ok ? '' : 'no'}" data-offer="${i}:${esc(o.id)}" aria-pressed="${pressed}">${main}<small>${esc(mkt)}${esc(who)}${esc((o.title || o.vehicles?.[0] || '').slice(0, 60))}${o.validThrough ? `, ends ${esc(o.validThrough)}` : ''}</small></button>`;
   };
   const byKind = (k) => (c.offers || []).filter((o) => offerKind(o) === k);
   const cashTotal = stackedCash(c);
@@ -522,6 +527,7 @@ function renderResults() {
       <p class="fine">${esc(basisLine(H))}</p>
     </article>
 
+    ${byPlaceHTML(r)}
     ${repriceBannerHTML()}
     <div class="verdict-actions">
       <button type="button" class="btn small" data-act="share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6h14v-6"></path></svg>Share these options</button>
@@ -734,7 +740,7 @@ let saveTimer;
 function snapshot() {
   const profiles = {};
   for (const [id, p] of Object.entries(store.profiles)) {
-    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
+    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, regionInfo: p.regionInfo, needsOfferRefresh: p.needsOfferRefresh, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
   }
   return JSON.stringify({ active: store.active, rev: store.rev || 0, profiles });
 }
@@ -763,6 +769,8 @@ function hydrate(p) {
     needsVerdictCheck: !!p.needsVerdictCheck, repriceNotice: p.repriceNotice || null,
     assumptions: { ...b.assumptions, ...p.assumptions },
     eligibility: { leaseCaptive: true, ...(p.eligibility || {}) },
+    regionInfo: { ...(p.regionInfo || {}) },
+    needsOfferRefresh: !!p.needsOfferRefresh,
     current: { ...b.current, ...p.current },
     candidates: (p.candidates || []).map((c) => blankCandidate({ ...c, buy: { ...blankCandidate().buy, ...c.buy }, lease: { ...blankCandidate().lease, ...c.lease } })),
     lookup: p.lookup || null,
@@ -796,6 +804,15 @@ function knownHousehold(id, p) {
   for (const c of p.candidates || []) if (c.offers?.length) c.needsPick = true;
   return true;
 }
+// Carol lives in North Port, FL (the Edge is still registered in Michigan); Scott is in Highlands Ranch, CO.
+function knownPlaces(id, p) {
+  const isCarols = id === 'carol' || /carol/i.test(p.name || '');
+  if (!isCarols || p.assumptions?.whereSetAt) return false;
+  p.assumptions = { ...p.assumptions, zip: '34287', state: 'FL', salesTaxPct: '', leaseTaxPct: '', tradeInTaxCredit: true, shopZips: '48302, 80129', whereSetAt: '2026-10-23' };
+  p.regionInfo = { ...(p.regionInfo || {}), 34287: { city: 'North Port', st: 'FL' }, 48302: { city: 'Bloomfield Hills', st: 'MI' }, 80129: { city: 'Highlands Ranch', st: 'CO' } };
+  p.needsOfferRefresh = true;
+  return true;
+}
 function fixedPhotos(id, p) {
   const isCarols = id === 'carol' || /carol/i.test(p.name || '');
   if (isCarols && /ford/i.test(p.current?.make || '') && /edge/i.test(p.current?.model || '') && p.photo?.fixed !== 'white-edge') { p.photo = { ...WHITE_EDGE }; return true; }
@@ -803,7 +820,7 @@ function fixedPhotos(id, p) {
 }
 function afterLoad() {
   let fixed = false;
-  for (const [id, p] of Object.entries(store.profiles)) { fixed = fixedPhotos(id, p) || fixed; fixed = knownHousehold(id, p) || fixed; }
+  for (const [id, p] of Object.entries(store.profiles)) { fixed = fixedPhotos(id, p) || fixed; fixed = knownHousehold(id, p) || fixed; fixed = knownPlaces(id, p) || fixed; }
   if (fixed) setTimeout(() => persist(), 0);
   for (const p of Object.values(store.profiles)) {
     for (const c of p.candidates) if (c.needsPick) { const keep = state; state = p; autoPick(c); state = keep; delete c.needsPick; }
@@ -815,7 +832,16 @@ function afterLoad() {
       p.needsVerdictCheck = false;
     }
   }
+  // Places changed (e.g. a new home ZIP): fetch every market's offers once.
+  if (state.needsOfferRefresh && state.candidates.some((c) => c.make && c.model) && !refreshing) {
+    refreshing = true;
+    setTimeout(async () => {
+      const p = state;
+      try { await priceAll(false); p.needsOfferRefresh = false; persist(); toast(`Offers updated for ${shopRegions().length} places`); } catch {} finally { refreshing = false; }
+    }, 1200);
+  }
 }
+var refreshing = false; // var: afterLoad can run before this line is reached
 
 async function reloadFromServer(msg) {
   try {
@@ -1253,6 +1279,58 @@ function renderDeals() {
 }
 
 // What the dealer would quote, in words: "$423/mo, $4,919 due" or "$811/mo for 60 mo".
+// ---------- By where it's registered ----------
+// Re-runs the comparison as if the car were registered at each ZIP: that state's taxes and fees,
+// and offers re-picked with that ZIP as home (residency-tied brands follow it).
+const ZIP_STATE = [[[320, 349], 'FL'], [[480, 499], 'MI'], [[800, 816], 'CO']];
+function stateOfZip(zip) {
+  const r = (state.regionInfo || {})[zip];
+  if (r?.st) return r.st;
+  const n = Number(String(zip).slice(0, 3));
+  return ZIP_STATE.find(([[lo, hi]]) => n >= lo && n <= hi)?.[1] || '';
+}
+let placeMemo = { key: '', rows: [] };
+function placeRows() {
+  const places = shopRegions().map((zip) => ({ zip, st: zip === state.assumptions.zip ? state.assumptions.state : stateOfZip(zip) })).filter((x) => x.st);
+  const seen = new Set();
+  const uniq = places.filter((x) => (seen.has(x.st) ? false : seen.add(x.st)));
+  if (uniq.length < 2) return [];
+  const key = JSON.stringify([uniq, state.assumptions, state.eligibility, state.current, state.pricing, state.candidates.map((c) => [c.id, c.sellingPrice, c.msrp, (c.offers || []).length, c.userPicked, c.selected, c.buy, c.lease?.enabled])]);
+  if (placeMemo.key === key) return placeMemo.rows;
+  const keep = state;
+  const rows = [];
+  try {
+    for (const pl of uniq) {
+      const home = pl.zip === keep.assumptions.zip;
+      const p = JSON.parse(JSON.stringify(keep));
+      if (!home) p.assumptions = { ...p.assumptions, zip: pl.zip, state: pl.st, salesTaxPct: '', leaseTaxPct: '', surtaxPct: '', surtaxCap: '', docFee: '', titleFees: '', tradeInTaxCredit: !NO_TRADE_TAX_CREDIT.has(pl.st) };
+      state = p;
+      if (!home) for (const c of p.candidates) if (c.offers?.length && c.sellingPrice) autoPick(c);
+      const r = analyze(analysisInput(p.candidates, {}, p));
+      const buyout = r.scenarios.find((x) => x.kind === 'buyout');
+      const best = r.scenarios[0];
+      rows.push({ ...pl, home, buyout, best, label: best ? optTitle(best) : '', tax: taxDefaults(pl.st, pl.zip) });
+    }
+  } finally { state = keep; }
+  placeMemo = { key, rows };
+  return rows;
+}
+const RESIDENCY = { FL: 'Florida expects new residents to register within 10 days', MI: 'Michigan expects new residents to register right away', CO: 'Colorado gives new residents 90 days' };
+function byPlaceHTML(r) {
+  const rows = placeRows();
+  if (!rows.length) return '';
+  const unit = costMode() === 'ownership' ? 'cost a month' : 'a month';
+  const cell = (s) => (s ? `<b>${money(s.monthly)}</b>` : '—');
+  return `<section class="panel places"><h2>By where it’s registered</h2>
+    <p class="sub">Same cars, ${esc(unit)}, with each state’s taxes and fees and the offers a resident there would get. Ford, Lincoln, GM and Stellantis offers follow the registration address; most other brands follow the dealer.</p>
+    <table class="place-t"><thead><tr><th scope="col">Registered in</th><th scope="col">Buy out the ${esc(state.current.model || 'car')}</th><th scope="col">Lowest option</th></tr></thead><tbody>
+    ${rows.map((x) => `<tr${x.home ? ' class="home"' : ''}><th scope="row">${esc((state.regionInfo || {})[x.zip]?.city || x.zip)}, ${esc(x.st)}${x.home ? '<small>home</small>' : ''}<small>${x.tax.salesTaxPct}%${x.tax.surtaxCap ? ` + ${x.tax.surtaxPct}% on first $5k` : ''} tax</small></th>
+      <td>${cell(x.buyout)}</td><td>${cell(x.best)}<small>${esc(x.label)}</small></td></tr>`).join('')}
+    </tbody></table>
+    <p class="fine">Registering a car in a state generally means living there or keeping the car there. ${rows.map((x) => RESIDENCY[x.st]).filter(Boolean).join('; ')}. Florida credits sales tax already paid to another state. Check with each state’s DMV before relying on a different registration.</p>
+  </section>`;
+}
+
 // ---------- How costs are counted (Settings) ----------
 const costMode = () => (state.assumptions.costMode === 'ownership' ? 'ownership' : 'payments');
 const spreadOn = () => !(state.assumptions.spreadUpfront === false || state.assumptions.spreadUpfront === 'false');
@@ -1289,6 +1367,10 @@ function openSettings() {
   $('#setRunning').checked = runningOn();
   $('#setMiles').value = a.annualMiles || '';
   $('#setRate').value = a.discountRatePct ?? '';
+  $('#setZip').value = a.zip || '';
+  $('#setState').innerHTML = STATES.map((x) => `<option ${x === a.state ? 'selected' : ''}>${x}</option>`).join('');
+  $('#setShopZips').value = a.shopZips || '';
+  $('#setWhereNote').textContent = '';
   settingsHints();
   $('#settings').showModal();
 }
@@ -1310,6 +1392,19 @@ function onSettingsChange() {
   a.includeRunning = $('#setRunning').checked;
   if ($('#setMiles').value) a.annualMiles = $('#setMiles').value.replace(/[^\d]/g, '');
   if ($('#setRate').value !== '') a.discountRatePct = $('#setRate').value;
+  const zip = $('#setZip').value.trim(), shop = $('#setShopZips').value.trim(), st = $('#setState').value;
+  let whereChanged = false;
+  if (/^\d{5}$/.test(zip) && zip !== a.zip) { a.zip = zip; whereChanged = true; }
+  if (shop !== (a.shopZips || '')) { a.shopZips = shop; whereChanged = true; }
+  if (st && st !== a.state) {
+    a.state = st; a.salesTaxPct = ''; a.leaseTaxPct = ''; a.tradeInTaxCredit = !NO_TRADE_TAX_CREDIT.has(st);
+    for (const c of state.candidates) if (c.offers?.length) autoPick(c);
+  }
+  if (whereChanged) $('#setWhereNote').textContent = 'Offers change with these places. Tap Check offers to refresh them.';
+  for (const k of ['zip', 'state', 'salesTaxPct', 'leaseTaxPct']) {
+    const el = document.getElementById(`f-assumptions-${k}`);
+    if (el && el.type !== 'checkbox') el.value = a[k];
+  }
   for (const k of ['horizonYears', 'annualMiles', 'discountRatePct']) {
     const el = document.getElementById(`f-assumptions-${k}`);
     if (el) el.value = a[k];
@@ -1453,7 +1548,21 @@ async function priceCandidate(i, { render = true } = {}) {
   if (render) renderModels();
   const used = c.condition && c.condition !== 'new';
   const q = new URLSearchParams({ year: c.year || '', make: c.make, model: c.model, trim: c.trim || '', zip: state.assumptions.zip || '', car_type: c.condition || 'new', max_miles: used ? String(Math.max(20000, (new Date().getFullYear() + 1 - Number(c.year || 0)) * 15000)) : '' });
-  const [market, inc] = await Promise.allSettled([api(`api/new-market?${q}`), used ? Promise.resolve({ offers: [], errors: [] }) : api(`api/incentives?${q}`)]);
+  const fetchOffers = async () => {
+    if (used) return { offers: [], errors: [] };
+    const out = { offers: [], errors: [] };
+    const res = await Promise.allSettled(shopRegions().map(async (zip) => {
+      const r = await api(`api/incentives?${new URLSearchParams({ ...Object.fromEntries(q), zip })}`);
+      for (const o of r.offers || []) {
+        if (o.city) { state.regionInfo ||= {}; state.regionInfo[zip] ||= { city: o.city, st: o.state || '' }; }
+        out.offers.push({ ...o, id: shopRegions().length > 1 ? `${zip}:${o.id}` : o.id, region: zip });
+      }
+      out.errors.push(...(r.errors || []));
+    }));
+    for (const x of res) if (x.status === 'rejected') out.errors.push({ provider: 'offers', message: x.reason.message });
+    return out;
+  };
+  const [market, inc] = await Promise.allSettled([api(`api/new-market?${q}`), fetchOffers()]);
   const notes = [];
   if (market.status === 'fulfilled') {
     const m = market.value; c.market = m;
@@ -1466,7 +1575,8 @@ async function priceCandidate(i, { render = true } = {}) {
   } else notes.push(market.reason.message);
   if (inc.status === 'fulfilled') {
     const model = c.model.toLowerCase();
-    c.offers = (inc.value.offers || []).filter((o) => !o.vehicles?.length || o.vehicles.some((v) => v.toLowerCase().includes(model))).slice(0, 12);
+    const fits = (inc.value.offers || []).filter((o) => !o.vehicles?.length || o.vehicles.some((v) => v.toLowerCase().includes(model)));
+    c.offers = shopRegions().flatMap((z) => fits.filter((o) => o.region === z).slice(0, 12));
     for (const e of inc.value.errors || []) notes.push(`Offers unavailable (${e.provider}: ${e.message})`);
   } else notes.push(inc.reason.message);
   if (c.sellingPrice) autoPick(c);
@@ -1513,9 +1623,22 @@ function eligibilityOf(p = state) {
 }
 const azActiveFor = (c) => azEligible(c) && planPct() > 0 && !c.azOff;
 // The best legal cash stack for one way of paying.
-function stackFor(c, { year = Number(c.year) || null, mode = 'finance', specialApr = false, azActive = azActiveFor(c) } = {}) {
-  return bestStack(c.offers || [], { elig: eligibilityOf(), make: c.make, mode, specialApr, azActive, year });
+function stackFor(c, { year = Number(c.year) || null, mode = 'finance', specialApr = false, azActive = azActiveFor(c), region = null } = {}) {
+  return bestStack(c.offers || [], { elig: eligibilityOf(), make: c.make, mode, specialApr, azActive, year, region, home: homeOf() });
 }
+// ---------- Markets: home ZIP plus other ZIPs to check for offers ----------
+const homeOf = (p = state) => ({ zip: p.assumptions.zip || '', st: p.assumptions.state || '' });
+function shopRegions(p = state) {
+  const extra = String(p.assumptions.shopZips || '').match(/\b\d{5}\b/g) || [];
+  return [...new Set([p.assumptions.zip, ...extra].filter(Boolean))];
+}
+const multiRegion = () => shopRegions().length > 1;
+function regionName(zip) {
+  const r = (state.regionInfo || {})[zip];
+  if (zip === state.assumptions.zip) return r?.city ? `Home, ${r.city}` : 'Home';
+  return r?.city ? `${r.city}${r.st ? `, ${r.st}` : ''}` : zip;
+}
+const offerOk = (c, o) => regionOk(o, c.make, homeOf()).ok;
 function applySelection(c) {
   const sel = selection(c);
   const total = stackedCash(c);
@@ -1546,23 +1669,27 @@ function autoPick(c) {
   if (!years.length) years.push(null);
   // With A/Z-Plan available, try the plan price (and only offers that combine with it) and the public price (every offer).
   const azChoices = azEligible(c) && planPct() > 0 ? [false, true] : [false];
-  let best = { m: Infinity, cash: [], why: {}, finance: null, year: null, azOff: false };
+  const regions = [...new Set((c.offers || []).map((o) => o.region).filter(Boolean))];
+  if (!regions.length) regions.push(null);
+  let best = { m: Infinity, cash: [], why: {}, finance: null, year: null, azOff: false, region: null };
   for (const azOff of azChoices) {
+   for (const region of regions) {
     for (const y of years) {
-      for (const f of [null, ...(c.offers || []).filter((o) => offerKind(o) === 'finance' && o.apr != null && yearOk(o, y))]) {
-        const st = stackFor({ ...c, azOff }, { year: y, mode: c.buy.payCash ? 'cash' : 'finance', specialApr: !!f });
+      for (const f of [null, ...(c.offers || []).filter((o) => offerKind(o) === 'finance' && o.apr != null && yearOk(o, y) && (!region || o.region === region) && offerOk(c, o))]) {
+        const st = stackFor({ ...c, azOff }, { year: y, mode: c.buy.payCash ? 'cash' : 'finance', specialApr: !!f, region });
         const tmp = { ...c, azOff, buy: { ...c.buy }, lease: { ...c.lease, enabled: false }, selected: { cash: st.ids, finance: f ? f.id : null, lease: null } };
         applySelection(tmp);
         const m = cost(tmp, 'buy');
-        if (m < best.m) best = { m, cash: st.ids, why: Object.fromEntries(st.reasons.map((r) => [r.id, r.why])), finance: f ? f.id : null, year: y, azOff };
+        if (m < best.m - 0.5 || (m < best.m + 0.5 && region === homeOf().zip && best.region !== region)) best = { m, cash: st.ids, why: Object.fromEntries(st.reasons.map((r) => [r.id, r.why])), finance: f ? f.id : null, year: y, azOff, region: st.ids.length || f ? region : null };
       }
     }
+   }
   }
   c.azOff = best.azOff;
-  sel.cash = best.cash; sel.finance = best.finance; sel.year = best.year; sel.why = { ...best.why };
+  sel.cash = best.cash; sel.finance = best.finance; sel.year = best.year; sel.why = { ...best.why }; sel.buyRegion = best.region;
   let bestLease = { id: null, m: Infinity, cash: [] };
-  for (const o of (c.offers || []).filter((x) => offerKind(x) === 'lease' && x.monthly && yearOk(x, fixed))) {
-    const st = stackFor(c, { year: offerYear(o), mode: 'lease', specialApr: true });
+  for (const o of (c.offers || []).filter((x) => offerKind(x) === 'lease' && x.monthly && yearOk(x, fixed) && offerOk(c, x))) {
+    const st = stackFor(c, { year: offerYear(o), mode: 'lease', specialApr: true, region: o.region || null });
     const tmp = { ...c, lease: { ...c.lease }, buy: { ...c.buy, enabled: false } };
     applyLeaseOffer(tmp, o);
     tmp.lease.addOnCash = String(st.total || '');
@@ -1748,6 +1875,13 @@ function wire() {
   $('#garageBtn').addEventListener('click', openGarage);
   $('#settingsBtn').addEventListener('click', openSettings);
   $('#settings').addEventListener('change', onSettingsChange);
+  $('#setReprice').addEventListener('click', async () => {
+    onSettingsChange();
+    const n = shopRegions().length;
+    $('#setWhereNote').textContent = `Checking offers in ${n} place${n === 1 ? '' : 's'}…`;
+    await priceAll(false);
+    $('#setWhereNote').textContent = $('#modelsStatus').textContent;
+  });
   $('#garageList').addEventListener('click', onGarageClick);
   $('#startAdd').addEventListener('click', startAdd);
   $('#step1Go').addEventListener('click', step1);

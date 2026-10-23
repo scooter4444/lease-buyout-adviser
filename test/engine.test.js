@@ -177,3 +177,15 @@ test('payments mode counts only what you pay in the period: no resale, no leftov
   const r3 = analyze(input('ownership'));
   assert.ok(r3.scenarios.find((s) => s.kind === 'buy').monthly < buy.monthly);
 });
+
+test('state tax details: Florida surtax only on the first $5,000; Highlands Ranch 5%; Michigan 6%', async () => {
+  const { taxDefaults, vehicleSalesTax, registrationAnnual } = await import('../public/engine.js');
+  const fl = taxDefaults('FL', '34287');
+  assert.equal(fl.salesTaxPct, 6);
+  assert.equal(fl.leaseTaxPct, 7);
+  assert.equal(Math.round(vehicleSalesTax(24481, fl)), Math.round(24481 * 0.06 + 50));
+  assert.equal(taxDefaults('CO', '80129').salesTaxPct, 5);
+  assert.equal(vehicleSalesTax(40000, taxDefaults('MI', '48302')), 2400);
+  assert.equal(registrationAnnual({ state: 'MI', msrp: 45000, ageYears: 0 }), 178 + 15 * 6);
+  assert.equal(registrationAnnual({ state: 'CO', msrp: 45000, ageYears: 0 }), Math.round(0.85 * 45000 * 0.021 + 110));
+});
