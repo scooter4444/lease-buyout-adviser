@@ -1,5 +1,6 @@
 import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
 import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
+import { logoUrl } from './logos.js';
 
 // ---------- State ----------
 const STORAGE_KEY = 'lba:v2';
@@ -102,6 +103,12 @@ function setPath(obj, p, v) {
 const money = (x, d = 0) => (x == null || !Number.isFinite(x) ? '—' : `${x < 0 ? '−' : ''}$${Math.abs(x).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d })}`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtInput = (v) => (v === '' || v == null ? '' : String(v));
+
+// Brand badge: the maker's logo on a small white tile (some logo files have white backgrounds).
+function logoHTML(make, cls = '') {
+  const u = logoUrl(make);
+  return u ? `<span class="logo ${cls}"><img src="${u}" alt="${esc(make)}" loading="lazy" decoding="async" onerror="this.parentNode.remove()"></span>` : '';
+}
 
 async function api(url) {
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -329,7 +336,7 @@ function summaryHTML(x, buyout) {
     : [c.year || 'New', c.trim].filter(Boolean).join(' ')) + (c.reason ? `${c.condition && c.condition !== 'new' && c.miles ? '. ' : c.condition && c.condition !== 'new' ? '' : '. '}${c.reason}` : '');
   const remove = `<button type="button" class="btn ghost small" data-remove="${i}">Remove</button>`;
   if (!best) {
-    return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}</div><div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div></header>
+    return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}</div><div class="mc-name">${logoHTML(c.make)}<b>${esc(carName(c))}</b><small>${esc(sub)}</small></div></header>
       ${c.status ? `<p class="status ${c.statusErr ? 'err' : ''}">${esc(c.status)}</p>` : '<p class="hint">Not priced yet.</p>'}
       <div class="mc-actions"><button type="button" class="btn primary small" data-price="${i}">Get prices &amp; offers</button>${remove}</div>`;
   }
@@ -337,7 +344,7 @@ function summaryHTML(x, buyout) {
   const eff = effectivePrice(c);
   const plan = azEligible(c) && planPct() ? `${state.pricing.plan}-Plan price` : 'Typical local price';
   return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}<span class="mc-rank">${x.rank}</span></div>
-      <div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div>
+      <div class="mc-name">${logoHTML(c.make)}<b>${esc(carName(c))}</b><small>${esc(sub)}</small></div>
       <div class="mc-cost"><b>${money(best.carPerMonth)}</b><small>a month for the car, ${best.kind === 'lease' ? 'leased' : 'bought'}</small></div></header>
     ${delta != null ? `<p class="mc-vs ${delta > 0 ? 'neg' : 'pos'}">${delta > 0 ? `${money(delta)}/mo more` : `${money(-delta)}/mo less`} than buying out your ${esc(curLabel())}</p>` : ''}
     <dl class="mc-grid">
@@ -413,7 +420,7 @@ function renderCarId() {
     const c = state.current;
     if (c.make && c.model) {
       el.hidden = false;
-      el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', phCls(state.photo, 'car-ph')) : ''}<div class="name">${esc([c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))}</div><div class="spec">${c.mpg ? `${esc(c.mpg)} mpg combined` : ''}</div>${photoButton()}`;
+      el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', phCls(state.photo, 'car-ph')) : ''}<div class="name">${logoHTML(c.make, 'inline')}${esc([c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))}</div><div class="spec">${c.mpg ? `${esc(c.mpg)} mpg combined` : ''}</div>${photoButton()}`;
     } else el.hidden = true;
     $('#valueSource').textContent = '';
     return;
@@ -421,7 +428,7 @@ function renderCarId() {
   const v = L.vehicle;
   const open = (L.recalls || []).filter((r) => !/closed|complete|remedied/i.test(r.status || ''));
   el.hidden = false;
-  el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', phCls(state.photo, 'car-ph')) : ''}<div class="name">${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' '))}</div>
+  el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', phCls(state.photo, 'car-ph')) : ''}<div class="name">${logoHTML(v.make, 'inline')}${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' '))}</div>
     <div class="spec">${esc([v.style || v.body, v.engine, v.drivetrain, v.mpg ? `${v.mpg} mpg combined` : ''].filter(Boolean).join(', '))}</div>
     ${photoButton()}
     ${L.recalls ? `<div class="recalls">${open.length ? `${open.length} open recall${open.length > 1 ? 's' : ''}. Details below the results.` : '<span style="color:var(--go)">No open recalls found.</span>'}</div>` : ''}`;
@@ -494,7 +501,7 @@ function renderResults() {
   el.innerHTML = `
     <article class="sticker ${stickerFresh ? 'fresh' : ''}">
       <div class="band"><span>${deadlineShort(state) ? esc(deadlineShort(state)) : 'Recommendation'}</span><span>${H / 12} yrs, ${Math.round(Number(r.assumptions.annualMiles) / 1000)}k mi/yr</span></div>
-      <div class="verdict ${winnerPhoto(best) ? 'with-ph' : ''}"><h1>${esc(v.headline)}</h1>${winnerPhoto(best) ? `<figure>${imgHTML(winnerPhoto(best).url, best.vehicle, phCls(winnerPhoto(best), 'win-ph'))}${winnerPhoto(best).exact ? '' : '<figcaption>Similar car, photo from a local listing</figcaption>'}</figure>` : ''}</div>
+      <div class="verdict ${winnerPhoto(best) ? 'with-ph' : ''}"><div class="v-head">${logoHTML(winnerMake(best))}<h1>${esc(v.headline)}</h1></div>${winnerPhoto(best) ? `<figure>${imgHTML(winnerPhoto(best).url, best.vehicle, phCls(winnerPhoto(best), 'win-ph'))}${winnerPhoto(best).exact ? '' : '<figcaption>Similar car, photo from a local listing</figcaption>'}</figure>` : ''}</div>
       <div class="figures">
         <div><b>${money(best.carPerMonth)}</b><span>a month for the car</span></div>
         <div><b>${payText(best) ? esc(payText(best).replace(/ for \d+ mo$/, '')) : 'Paid off'}</b><span>${best.kind === 'lease' ? 'payment + due at signing' : best.monthlyPayment ? 'loan payment' : 'no payment'}</span></div>
@@ -860,7 +867,7 @@ function renderGarage() {
       <button type="button" class="g-open" data-open="${id}" aria-label="Open ${esc(profileName(p))}">
         <div class="g-pic">${imgHTML(p.photo?.url, profileName(p), phCls(p.photo))}</div>
         <div class="g-text">
-          <b>${esc(profileName(p))}</b>
+          <b>${logoHTML(c.make, 'inline')}${esc(profileName(p))}</b>
           <small>${esc(sub || 'No car details yet')}</small>
           ${deadlineText(p) ? `<small class="g-deadline">${esc(deadlineText(p))}</small>` : ''}
         </div>
@@ -1132,7 +1139,7 @@ function renderIdeas() {
   const used = usedSuggestionList().slice(0, 5);
   const el = $('#ideas');
   if (!fresh.length && !used.length) { el.innerHTML = ''; return; }
-  const chips = (list, tag) => list.map((x, i) => `<button type="button" class="idea" data-idea="${tag}:${i}"><b>+ ${esc(carName(x))}</b><small>${esc(x.reason)}</small></button>`).join('');
+  const chips = (list, tag) => list.map((x, i) => `<button type="button" class="idea" data-idea="${tag}:${i}">${logoHTML(x.make)}<b>+ ${esc(carName(x))}</b><small>${esc(x.reason)}</small></button>`).join('');
   el.innerHTML = `${fresh.length ? `<h3 class="ideas-h">New, suggested for your ${esc(state.current.model)}</h3><div class="ideas">${chips(fresh, 'n')}</div>` : ''}
     ${used.length ? `<h3 class="ideas-h">Gently used and certified</h3><div class="ideas">${chips(used, 'u')}</div>` : ''}`;
   el.onclick = (e) => {
@@ -1199,7 +1206,7 @@ function renderDeals() {
       const d = buyout ? s.carPerMonth - buyout.carPerMonth : null;
       const flags = dealFlags(o);
       const added = have.has(`${o.make}|${o.model}`.toLowerCase());
-      return `<li><div class="dl-name"><b>${esc([o.year, o.make, o.model].filter(Boolean).join(' '))}</b><small>${esc(o.trim || '')}${o.msrp ? ` · MSRP ${money(o.msrp)}` : ''}</small></div>
+      return `<li>${logoHTML(o.make, 'deal')}<div class="dl-name"><b>${esc([o.year, o.make, o.model].filter(Boolean).join(' '))}</b><small>${esc(o.trim || '')}${o.msrp ? ` · MSRP ${money(o.msrp)}` : ''}</small></div>
         <div class="dl-cost"><b>${money(s.carPerMonth)}</b><small>/mo for the car</small></div>
         <div class="dl-terms">${money(o.monthly)}/mo + ${money(o.dueAtSigning || 0)} due · ${o.term || 36} mo · ${(dealMiles(o) / 1000).toFixed(dealMiles(o) % 1000 ? 1 : 0)}k mi/yr${d != null ? ` · <span class="${d > 0 ? 'neg' : 'pos'}">${d > 0 ? `+${money(d)}` : `−${money(-d)}`} vs buyout</span>` : ''}${flags.length ? ` · <span class="tag">${flags.map(esc).join('</span> <span class="tag">')}</span>` : ''}</div>
         <button type="button" class="btn small ${added ? 'ghost' : ''}" data-deal="${deals.offers.indexOf(o)}" ${added ? 'disabled' : ''}>${added ? 'In compare' : 'Add to compare'}</button></li>`;
@@ -1216,6 +1223,11 @@ function renderDeals() {
 }
 
 // What the dealer would quote, in words: "$423/mo, $4,919 due" or "$811/mo for 60 mo".
+function winnerMake(s) {
+  if (!s) return '';
+  if (s.kind === 'buyout') return state.current.make;
+  return state.candidates.find((c) => c.id === s.candidateId)?.make || '';
+}
 function payText(s) {
   if (!s) return '';
   if (s.kind === 'lease') return `${money(s.monthlyPayment)}/mo + ${money(Math.max(0, s.upfront))} due`;
