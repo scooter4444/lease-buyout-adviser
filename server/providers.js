@@ -326,10 +326,44 @@ export async function plateToVin({ state, plate }) {
 }
 
 // ---------- Photos ----------
+// Clean, no-background model images from your own site, via a URL template set in Railway, e.g.
+// IMAGE_URL_TEMPLATE=https://invoice-pricing.com/path/{year}/{make}/{model}.png
+// Placeholders: {year} {make} {model} {trim} (as given), {make_slug} {model_slug} (lower-case, hyphens),
+// {make_us} {model_us} (lower-case, underscores). Each candidate URL is checked once and cached.
+export const cutoutsConfigured = () => !!process.env.IMAGE_URL_TEMPLATE;
+async function cutoutFor({ year, make, model, trim }) {
+  const tpl = process.env.IMAGE_URL_TEMPLATE;
+  if (!tpl || !make || !model) return null;
+  const slug = (x, sep) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, sep).replace(new RegExp(`^${sep}|${sep}$`, 'g'), '');
+  const now = new Date().getFullYear();
+  const years = [...new Set([Number(year) || now + 1, now + 1, now, now - 1].filter(Boolean))];
+  for (const y of years) {
+    const url = tpl
+      .replaceAll('{year}', String(y)).replaceAll('{make}', encodeURIComponent(make)).replaceAll('{model}', encodeURIComponent(model))
+      .replaceAll('{trim}', encodeURIComponent(trim || '')).replaceAll('{make_slug}', slug(make, '-')).replaceAll('{model_slug}', slug(model, '-'))
+      .replaceAll('{make_us}', slug(make, '_')).replaceAll('{model_us}', slug(model, '_'));
+    const key = `cutout:${url}`;
+    let ok = getCached(key);
+    if (ok === undefined) {
+      try {
+        const r = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
+        ok = r.ok && /^image\//.test(r.headers.get('content-type') || '');
+      } catch { ok = false; }
+      setCached(key, ok, ok ? 30 * DAY : 3 * DAY);
+    }
+    if (ok) return url;
+    if (!/\{year\}/.test(tpl)) break; // template has no year: one try is enough
+  }
+  return null;
+}
+
 // A photo of this exact VIN if one exists (auto.dev, free tier), otherwise a local
 // listing photo of the same year/make/model. Returns { url, exact }.
-export async function photoFor({ vin, year, make, model, zip }) {
+export async function photoFor({ vin, year, make, model, trim, zip, prefer }) {
   if (MOCK) return mock.photo({ make, model });
+  const cut = await cutoutFor({ year, make, model, trim });
+  if (cut) return { url: cut, exact: false, cutout: true, custom: true };
+  if (prefer === 'cutout') return { url: null, exact: false };
   if (vin && /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) {
     const r = await attempt(() => ad(`/photos/${String(vin).toUpperCase()}`, null, 30 * DAY));
     const url = r.ok && (r.data?.data?.retail?.[0] || r.data?.retail?.[0]);

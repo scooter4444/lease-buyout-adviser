@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  lookupVehicle, newCarMarket, incentives, autodevTco, autodevApr, plateToVin, photoFor, configured, ProviderError,
+  lookupVehicle, newCarMarket, incentives, autodevTco, autodevApr, plateToVin, photoFor, cutoutsConfigured, configured, ProviderError,
 } from './providers.js';
 import { usageThisMonth, cacheDir } from './cache.js';
 import { ask, askConfigured } from './ask.js';
@@ -47,7 +47,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/status', (_req, res) => {
   const usage = usageThisMonth();
   res.json({
-    providers: { ...configured(), ask: askConfigured() },
+    providers: { ...configured(), ask: askConfigured(), cutouts: cutoutsConfigured() },
     usage,
     limits: { marketcheck: Number(process.env.MARKETCHECK_MONTHLY_LIMIT || 500), autodev: Number(process.env.AUTODEV_MONTHLY_LIMIT || 1000) },
   });

@@ -199,7 +199,8 @@ function candidateHTML(c, i) {
 
 // ---------- Photos ----------
 const phCls = (ph, cls = '') => `${cls}${ph?.custom ? ' contain' : ''}`;
-const photoOf = (c) => c.market?.photo || c.photo?.url || null;
+const photoOf = (c) => (c.photo?.cutout ? c.photo.url : null) || c.market?.photo || c.photo?.url || null;
+let cutoutsOn = false;
 function imgHTML(url, alt, cls = '') {
   if (!url) return `<div class="ph ${cls} ph-empty" aria-hidden="true"></div>`;
   return `<img class="ph ${cls}" src="${esc(url)}" alt="${esc(alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ph ${cls} ph-empty'}))">`;
@@ -217,14 +218,16 @@ async function fetchPhoto(key, params, assign) {
 async function ensurePhotos() {
   const cur = state.current;
   const jobs = [];
-  if (cur.make && cur.model && !state.photo?.url) {
+  if (cur.make && cur.model && (!state.photo?.url || (cutoutsOn && !state.photo.custom && !state.photo.cutoutTried))) {
+    if (state.photo) state.photo.cutoutTried = true;
     const owner = state;
     jobs.push(fetchPhoto(`cur:${cur.vin || cur.make + cur.model}`, { vin: cur.vin || '', year: cur.year || '', make: cur.make, model: cur.model, zip: state.assumptions.zip || '' }, (r) => { owner.photo = r; }));
   }
   for (const c of state.candidates) {
-    if (c.make && c.model && !photoOf(c) && !c.photoTried) {
-      c.photoTried = true;
-      jobs.push(fetchPhoto(`c:${c.id}`, { year: c.year || '', make: c.make, model: c.model, zip: state.assumptions.zip || '' }, (r) => { c.photo = r; }));
+    const wantCutout = cutoutsOn && !c.photo?.cutout && !c.cutoutTried;
+    if (c.make && c.model && ((!photoOf(c) && !c.photoTried) || wantCutout)) {
+      c.photoTried = true; if (cutoutsOn) c.cutoutTried = true;
+      jobs.push(fetchPhoto(`c:${c.id}`, { year: c.year || '', make: c.make, model: c.model, trim: c.trim || '', zip: state.assumptions.zip || '', prefer: photoOf(c) ? 'cutout' : '' }, (r) => { c.photo = r; }));
     }
   }
   if (!jobs.length) return;
@@ -316,14 +319,14 @@ function summaryHTML(x, buyout) {
   const sub = [c.year || 'New', c.trim].filter(Boolean).join(' ') + (c.reason ? `. ${c.reason}` : '');
   const remove = `<button type="button" class="btn ghost small" data-remove="${i}">Remove</button>`;
   if (!best) {
-    return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c))}</div><div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div></header>
+    return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}</div><div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div></header>
       ${c.status ? `<p class="status ${c.statusErr ? 'err' : ''}">${esc(c.status)}</p>` : '<p class="hint">Not priced yet.</p>'}
       <div class="mc-actions"><button type="button" class="btn primary small" data-price="${i}">Get prices &amp; offers</button>${remove}</div>`;
   }
   const delta = buyout ? best.perMonth - buyout.perMonth : null;
   const eff = effectivePrice(c);
   const plan = azEligible(c) && planPct() ? `${state.pricing.plan}-Plan price` : 'Typical local price';
-  return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c))}<span class="mc-rank">${x.rank}</span></div>
+  return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}<span class="mc-rank">${x.rank}</span></div>
       <div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div>
       <div class="mc-cost"><b>${money(best.perMonth)}</b><small>per month, all in, ${best.kind === 'lease' ? 'leased' : 'bought'}</small></div></header>
     ${delta != null ? `<p class="mc-vs ${delta > 0 ? 'neg' : 'pos'}">${delta > 0 ? `${money(delta)}/mo more` : `${money(-delta)}/mo less`} than buying out your ${esc(curLabel())}</p>` : ''}
@@ -428,7 +431,7 @@ function winnerPhoto(best) {
   if (best.kind === 'buyout') return state.photo?.url ? state.photo : null;
   const c = state.candidates.find((x) => x.id === best.candidateId);
   const url = c && photoOf(c);
-  return url ? { url, exact: false } : null;
+  return url ? { url, exact: !!c.photo?.cutout, custom: !!c.photo?.cutout } : null;
 }
 function renderResults() {
   const r = analyze(analysisInput());
@@ -1196,6 +1199,7 @@ function applyOffer(c, o) {
 async function refreshUsage() {
   try {
     const s = await api('api/status');
+    if (s.providers?.cutouts && !cutoutsOn) { cutoutsOn = true; ensurePhotos(); }
     const mc = s.usage?.marketcheck || 0; const ad = s.usage?.autodev || 0;
     const left = s.limits.marketcheck - mc;
     const parts = [];
