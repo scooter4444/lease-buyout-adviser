@@ -1194,14 +1194,14 @@ function renderDeals() {
     .sort((a, b) => a.s.carPerMonth - b.s.carPerMonth);
   if (!rows.length) { el.innerHTML = `<p class="hint">No ${suvOnly ? 'SUV ' : ''}lease deals found within 15 miles.</p>`; return; }
   const have = new Set(state.candidates.map((c) => `${c.make}|${c.model}`.toLowerCase()));
-  el.innerHTML = `<p class="hint">${rows.length} deals from ${new Set(rows.map((x) => x.o.make)).size} makes, cheapest real cost first. “For the car” spreads the money due at signing over the lease${buyout ? `; buying out her ${esc(curLabel())} is ${money(buyout.carPerMonth)}/mo` : ''}.</p>
+  el.innerHTML = `<p class="hint">${rows.length} deals from ${new Set(rows.map((x) => x.o.make)).size} makes, cheapest real cost first. “For the car” spreads the money due at signing over the lease${buyout ? `; buying out your ${esc(curLabel())} is ${money(buyout.carPerMonth)}/mo` : ''}.</p>
     <ol class="deal-list">${rows.slice(0, dealsShown).map(({ o, s }, i) => {
       const d = buyout ? s.carPerMonth - buyout.carPerMonth : null;
       const flags = dealFlags(o);
       const added = have.has(`${o.make}|${o.model}`.toLowerCase());
-      return `<li><div class="dl-name"><b>${esc([o.year, o.make, o.model].filter(Boolean).join(' '))}</b><small>${esc(o.trim || '')}${o.msrp ? ` · MSRP ${money(o.msrp)}` : ''}</small></div>
+      return `<li><div class="dl-name"><b>${esc([o.year, o.make, o.model].filter(Boolean).join(' '))}</b><small>${esc([o.trim, o.msrp ? `MSRP ${money(o.msrp)}` : ''].filter(Boolean).join(', '))}</small></div>
         <div class="dl-cost"><b>${money(s.carPerMonth)}</b><small>/mo for the car</small></div>
-        <div class="dl-terms">${money(o.monthly)}/mo + ${money(o.dueAtSigning || 0)} due · ${o.term || 36} mo · ${(dealMiles(o) / 1000).toFixed(dealMiles(o) % 1000 ? 1 : 0)}k mi/yr${d != null ? ` · <span class="${d > 0 ? 'neg' : 'pos'}">${d > 0 ? `+${money(d)}` : `−${money(-d)}`} vs buyout</span>` : ''}${flags.length ? ` · <span class="tag">${flags.map(esc).join('</span> <span class="tag">')}</span>` : ''}</div>
+        <div class="dl-terms"><span>${money(o.monthly)}/mo + ${money(o.dueAtSigning || 0)} due</span><span>${o.term || 36} months, ${(dealMiles(o) / 1000).toFixed(dealMiles(o) % 1000 ? 1 : 0)}k mi/yr</span>${d != null ? `<span class="${d > 0 ? 'neg' : 'pos'}">${d > 0 ? `${money(d)}/mo more` : `${money(-d)}/mo less`} than buying out</span>` : ''}${flags.map((f) => `<span class="tag">${esc(f)}</span>`).join('')}</div>
         <button type="button" class="btn small ${added ? 'ghost' : ''}" data-deal="${deals.offers.indexOf(o)}" ${added ? 'disabled' : ''}>${added ? 'In compare' : 'Add to compare'}</button></li>`;
     }).join('')}</ol>
     ${rows.length > dealsShown ? `<button type="button" class="btn small ghost" id="moreDeals">Show ${Math.min(20, rows.length - dealsShown)} more</button>` : ''}`;
