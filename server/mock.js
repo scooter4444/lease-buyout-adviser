@@ -16,6 +16,20 @@ export async function marketcheck(path, p) {
     const usedK = p.car_type === 'used' ? 0.72 : p.car_type === 'certified' ? 0.8 : 1;
     return { num_found: 12 + (h % 60), listings, stats: { price: { median: Math.round((base + 1500) * usedK), min: Math.round(base * usedK) }, msrp: { median: base + 3200 }, miles: { median: p.car_type === 'new' ? 8 : 24000 } } };
   }
+  if (path.includes('incentive') && !p.make && p.offer_type === 'lease') {
+    // All-makes sweep (cheapest first).
+    const rows = [
+      ['Hyundai', 'Tucson', 2026, 'SE', 'SUV', 289, 36, 3999, 33500, 10000],
+      ['Genesis', 'GV70', 2026, '2.5T', 'SUV', 389, 24, 4999, 50480, 10000],
+      ['Lexus', 'NX', 2026, '350', 'SUV', 449, 36, 4999, 49689, 10000],
+      ['Mercedes-Benz', 'GLC', 2026, 'GLC 300', 'SUV', 469, 24, 5103, 52900, 20000],
+      ['Ford', 'Explorer', 2026, 'Active', null, 449, 24, 4289, 45000, 21000],
+      ['Nissan', 'Murano', 2026, 'SL', 'SUV', 399, 36, 4919, 49130, 10000],
+      ['Honda', 'Accord', 2026, 'EX', 'Sedan', 329, 36, 3499, 33000, 12000],
+    ];
+    const start = Number(p.start) || 0;
+    return { num_found: rows.length, listings: rows.slice(start, start + 10).map(([make, model, year, trim, body, monthly, term, due, msrp, miles], k) => ({ id: `sw${k}`, base_sha: `sw${k}`, city: 'Southfield', offer: { offer_type: 'lease', titles: [`${year} ${make} ${model} ${trim}`], vehicles: [{ year, make, model, trim, body_type: body }], amounts: [{ monthly, term, term_unit: 'months' }], due_at_signing: due, msrp, mileage_limit: miles, over_mileage_fee: 0.25, valid_through: '11/02/2026', disclaimers: ['Mock offer.'] } })) };
+  }
   if (path.includes('incentive')) {
     if (!['Ford', 'Toyota', 'Honda', 'Hyundai'].includes(p.make)) return { num_found: 0, listings: [] };
     const ford = p.make === 'Ford';

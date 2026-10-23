@@ -292,6 +292,45 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100,
   return { source: null, photo: null, count: 0, medianPrice: null, listings: [], errors };
 }
 
+function mapOffer(x) {
+  const o = x.offer || {};
+  const amt = o.amounts?.[0] || {};
+  const term = amt.term ? (amt.term_unit === 'years' ? amt.term * 12 : amt.term) : null;
+  return {
+    id: x.id,
+    sha: x.base_sha || null,
+    make: o.vehicles?.[0]?.make ?? null,
+    model: o.vehicles?.[0]?.model ?? null,
+    body: o.vehicles?.[0]?.body_type ?? null,
+    fuel: o.vehicles?.[0]?.fuel_type ?? null,
+    city: x.city || null,
+    type: o.offer_type,
+    title: o.titles?.[0] || o.oem_program_name || '',
+    vehicles: (o.vehicles || []).map((v) => [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ')),
+    monthly: amt.monthly ?? null,
+    apr: amt.apr ?? null,
+    term,
+    dueAtSigning: o.due_at_signing ?? null,
+    cashback: o.cashback_amount ?? null,
+    group: o.cashback_target_group || null,
+    year: o.vehicles?.[0]?.year ?? null,
+    trim: o.vehicles?.[0]?.trim ?? null,
+    msrp: o.msrp ?? null,
+    netCapCost: o.net_cap_cost ?? null,
+    downPayment: o.down_payment ?? null,
+    residual: o.lease_end_purchase_price ?? null,
+    mileageLimit: o.mileage_limit ?? null,
+    overMileageFee: o.over_mileage_fee ?? null,
+    dispositionFee: o.disposition_fee ?? null,
+    acquisitionFee: o.acquisition_fee ?? null,
+    validThrough: o.valid_through ?? null,
+    disclaimer: o.disclaimers?.[0]?.slice(0, 400) ?? null,
+    // The fine print that matters for stacking, kept separately so it isn't cut off.
+    noSpecialApr: /not (?:compatible|combinable|available) with[^.]*(?:special|promo\w*)\s+(?:APR|lease|financ)/i.test((o.disclaimers || []).join(' ')),
+    requiresCaptive: /must be (?:financed|leased)[^.]*(?:NMAC|Ford Credit|Toyota Financial|American Honda|Hyundai Motor Finance|captive)|financed or leased through/i.test((o.disclaimers || []).join(' ')),
+  };
+}
+
 // Offers for one make and ZIP. The by-make-and-ZIP endpoint is the one that returns the
 // local (MSA) programs; the generic /oem search with make+zip came back empty for every car.
 export async function incentives({ make, model, year, zip }) {
@@ -313,42 +352,33 @@ export async function incentives({ make, model, year, zip }) {
     if (!more.ok) break;
     listings.push(...(more.data?.listings || []));
   }
-  const offers = listings.map((x) => {
-    const o = x.offer || {};
-    const amt = o.amounts?.[0] || {};
-    const term = amt.term ? (amt.term_unit === 'years' ? amt.term * 12 : amt.term) : null;
-    return {
-      id: x.id,
-      type: o.offer_type,
-      title: o.titles?.[0] || o.oem_program_name || '',
-      vehicles: (o.vehicles || []).map((v) => [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ')),
-      monthly: amt.monthly ?? null,
-      apr: amt.apr ?? null,
-      term,
-      dueAtSigning: o.due_at_signing ?? null,
-      cashback: o.cashback_amount ?? null,
-      group: o.cashback_target_group || null,
-      year: o.vehicles?.[0]?.year ?? null,
-      trim: o.vehicles?.[0]?.trim ?? null,
-      msrp: o.msrp ?? null,
-      netCapCost: o.net_cap_cost ?? null,
-      downPayment: o.down_payment ?? null,
-      residual: o.lease_end_purchase_price ?? null,
-      mileageLimit: o.mileage_limit ?? null,
-      overMileageFee: o.over_mileage_fee ?? null,
-      dispositionFee: o.disposition_fee ?? null,
-      acquisitionFee: o.acquisition_fee ?? null,
-      validThrough: o.valid_through ?? null,
-      disclaimer: o.disclaimers?.[0]?.slice(0, 400) ?? null,
-      // The fine print that matters for stacking, kept separately so it isn't cut off.
-      noSpecialApr: /not (?:compatible|combinable|available) with[^.]*(?:special|promo\w*)\s+(?:APR|lease|financ)/i.test((o.disclaimers || []).join(' ')),
-      requiresCaptive: /must be (?:financed|leased)[^.]*(?:NMAC|Ford Credit|Toyota Financial|American Honda|Hyundai Motor Finance|captive)|financed or leased through/i.test((o.disclaimers || []).join(' ')),
-    };
-  });
+  const offers = listings.map(mapOffer);
   // The same program can show up twice across pages.
   const seen = new Set();
-  const unique = offers.filter((o) => (seen.has(o.id) ? false : seen.add(o.id)));
+  const unique = offers.filter((o) => { const k = o.sha || o.id; return seen.has(k) ? false : seen.add(k); });
   return { offers: unique, count: r.data?.num_found ?? unique.length, errors: [] };
+}
+
+// Every factory lease deal nearby, all makes, cheapest payment first (one call per 10 deals,
+// cached a day). Nearby dealers repeat the same program, so it is deduped by program.
+export async function dealSweep({ zip, radius = 15, pages = 8 }) {
+  if (!zip) throw new ProviderError('app', 400, 'zip is required');
+  const offers = [];
+  const seen = new Set();
+  let found = 0;
+  const errors = [];
+  for (let p = 0; p < Math.min(12, Number(pages) || 8); p++) {
+    const r = await attempt(() => mc('/v2/search/car/incentive/oem', {
+      zip, radius: Math.min(50, Number(radius) || 15), offer_type: 'lease', monthly_range: '100-1500',
+      sort_by: 'monthly', sort_order: 'asc', rows: 10, start: p * 10,
+    }, DAY));
+    if (!r.ok) { errors.push(r.error); break; }
+    found = r.data?.num_found ?? found;
+    const page = (r.data?.listings || []).map(mapOffer);
+    for (const o of page) { const k = o.sha || o.id; if (!seen.has(k) && o.monthly) { seen.add(k); offers.push(o); } }
+    if (page.length < 10) break;
+  }
+  return { offers, found, errors };
 }
 
 // ---------- auto.dev paid-plan extras (used only if the plan allows) ----------

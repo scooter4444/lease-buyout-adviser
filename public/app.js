@@ -379,6 +379,7 @@ function compareChart(priced, buyout) {
 
 function renderModels() {
   renderIdeas();
+  renderDeals();
   const seg = state.segment || segmentFor({ make: state.current.make, model: state.current.model, body: state.lookup?.vehicle?.body });
   $('#segment').innerHTML = Object.entries(SEGMENTS).map(([id, sg]) => `<option value="${id}" ${id === seg ? 'selected' : ''}>${esc(sg.label)}</option>`).join('');
   for (const r of $$('input[name="plan"]')) r.checked = r.value === state.pricing.plan;
@@ -1141,6 +1142,79 @@ function renderIdeas() {
   };
 }
 
+// ---------- Every lease deal nearby, all makes ----------
+let deals = null; // { offers, found, at }
+let dealsShown = 20;
+const NOT_SUV = new Set(['midsize-sedan', 'compact-car', 'fullsize-pickup', 'midsize-pickup']);
+const SUV_MODELS = new Set(Object.entries(SEGMENTS).filter(([k]) => !NOT_SUV.has(k)).flatMap(([, v]) => v.models.map(([mk, md]) => `${mk}|${md}`.toLowerCase())));
+const SUV_NAME = /\b(SUV|crossover|X[1-7]|iX|Q[2-8]|Q4|e-tron|GL[ABCES]|EQ[BES]|G-Class|XC\d0|EX\d0|[NRUGTL]X|RZ|QX\d0|MDX|RDX|ZDX|ADX|GV\d0|CX-\d0?|RAV4|CR-V|HR-V|Pilot|Passport|Prologue|Rogue|Murano|Pathfinder|Kicks|Ariya|Armada|Highlander|4Runner|Sequoia|Venza|bZ|Corolla Cross|Tucson|Santa Fe|Palisade|Kona|Ioniq [59]|Sportage|Sorento|Telluride|Seltos|EV[369]|Niro|Forester|Outback|Ascent|Crosstrek|Solterra|Trailseeker|Tiguan|Atlas|Taos|ID\.4|Escape|Edge|Explorer|Expedition|Bronco|Mach-E|Corsair|Nautilus|Aviator|Navigator|Equinox|Blazer|Traverse|Tahoe|Suburban|Trax|Trailblazer|Terrain|Acadia|Yukon|Envision|Encore|Enclave|XT[456]|Lyriq|Optiq|Vistiq|Escalade|Wrangler|Cherokee|Compass|Wagoneer|Durango|Hornet|Pacifica|Macan|Cayenne|Range Rover|Defender|Discovery|Stelvio|Tonale|Grecale|Model [XY]|R1S|R2|Outlander|Eclipse Cross|Countryman)\b/i;
+const isSuv = (o) => (o.body ? /suv|crossover|utility|wagon/i.test(o.body) : false) || SUV_MODELS.has(`${o.make}|${o.model}`.toLowerCase()) || SUV_NAME.test(`${o.model} ${o.title || ''}`);
+const dealMiles = (o) => (o.mileageLimit ? Math.round(o.mileageLimit >= 16000 ? o.mileageLimit / ((o.term || 36) / 12) : o.mileageLimit) : 10000);
+function dealFlags(o) {
+  const t = `${o.title || ''} ${o.group || ''} ${o.disclaimer || ''}`;
+  const f = [];
+  if (/loyalty (?:offer|credit)|current or former \w+ owners|owners or lessees|lease loyalty|owner loyalty/i.test(t)) f.push('assumes loyalty');
+  if (/conquest/i.test(t)) f.push('conquest');
+  if (/military|first responder|college|graduate/i.test(t)) f.push('affinity only');
+  if (azEligible(o) && planPct()) f.push(`${state.pricing.plan}-Plan may beat this`);
+  return f;
+}
+function dealScenario(o) {
+  const msrp = Number(o.msrp) || (o.netCapCost ? Number(o.netCapCost) + Number(o.downPayment || 0) : Number(o.monthly) * 95);
+  const c = {
+    id: `deal-${o.id}`, make: o.make, model: o.model, year: String(o.year || ''), trim: o.trim || '', msrp: String(Math.round(msrp)), sellingPrice: String(Math.round(msrp)),
+    buy: { enabled: false }, lease: { enabled: true, monthly: String(o.monthly), termMonths: String(o.term || 36), dueAtSigning: o.dueAtSigning != null ? String(o.dueAtSigning) : '', annualMileage: String(dealMiles(o)), overMileageFee: String(o.overMileageFee || 0.25), dispositionFee: String(o.dispositionFee ?? 395), source: 'offer' },
+  };
+  const r = analyze({ ...analysisInput([c]), candidates: [{ ...c }] });
+  return r.scenarios.find((x) => x.kind === 'lease') || null;
+}
+async function findDeals() {
+  const zip = state.assumptions.zip;
+  const st = $('#dealsStatus');
+  if (!zip) { st.textContent = 'Add a ZIP code on the Your car tab first.'; st.className = 'status err'; return; }
+  st.className = 'status'; st.textContent = 'Pulling every factory lease deal near you…';
+  $('#findDeals').disabled = true;
+  try {
+    const r = await api(`api/deals?zip=${encodeURIComponent(zip)}&radius=15&pages=10`);
+    deals = { ...r, at: Date.now() };
+    dealsShown = 20;
+    st.textContent = r.errors?.length && !r.offers.length ? `Couldn’t load deals (${r.errors[0].message}).` : '';
+    renderDeals(); refreshUsage();
+  } catch (e) { st.textContent = e.message; st.className = 'status err'; }
+  $('#findDeals').disabled = false;
+}
+function renderDeals() {
+  const el = $('#dealList');
+  if (!el) return;
+  if (!deals) { el.innerHTML = ''; return; }
+  const suvOnly = $('#dealsSuv').checked;
+  const buyout = lastAnalysis?.scenarios?.find((s) => s.kind === 'buyout');
+  const rows = deals.offers.filter((o) => o.make && o.model && (!suvOnly || isSuv(o)))
+    .map((o) => ({ o, s: dealScenario(o) })).filter((x) => x.s)
+    .sort((a, b) => a.s.carPerMonth - b.s.carPerMonth);
+  if (!rows.length) { el.innerHTML = `<p class="hint">No ${suvOnly ? 'SUV ' : ''}lease deals found within 15 miles.</p>`; return; }
+  const have = new Set(state.candidates.map((c) => `${c.make}|${c.model}`.toLowerCase()));
+  el.innerHTML = `<p class="hint">${rows.length} deals from ${new Set(rows.map((x) => x.o.make)).size} makes, cheapest real cost first. “For the car” spreads the money due at signing over the lease${buyout ? `; buying out her ${esc(curLabel())} is ${money(buyout.carPerMonth)}/mo` : ''}.</p>
+    <ol class="deal-list">${rows.slice(0, dealsShown).map(({ o, s }, i) => {
+      const d = buyout ? s.carPerMonth - buyout.carPerMonth : null;
+      const flags = dealFlags(o);
+      const added = have.has(`${o.make}|${o.model}`.toLowerCase());
+      return `<li><div class="dl-name"><b>${esc([o.year, o.make, o.model].filter(Boolean).join(' '))}</b><small>${esc(o.trim || '')}${o.msrp ? ` · MSRP ${money(o.msrp)}` : ''}</small></div>
+        <div class="dl-cost"><b>${money(s.carPerMonth)}</b><small>/mo for the car</small></div>
+        <div class="dl-terms">${money(o.monthly)}/mo + ${money(o.dueAtSigning || 0)} due · ${o.term || 36} mo · ${(dealMiles(o) / 1000).toFixed(dealMiles(o) % 1000 ? 1 : 0)}k mi/yr${d != null ? ` · <span class="${d > 0 ? 'neg' : 'pos'}">${d > 0 ? `+${money(d)}` : `−${money(-d)}`} vs buyout</span>` : ''}${flags.length ? ` · <span class="tag">${flags.map(esc).join('</span> <span class="tag">')}</span>` : ''}</div>
+        <button type="button" class="btn small ${added ? 'ghost' : ''}" data-deal="${deals.offers.indexOf(o)}" ${added ? 'disabled' : ''}>${added ? 'In compare' : 'Add to compare'}</button></li>`;
+    }).join('')}</ol>
+    ${rows.length > dealsShown ? `<button type="button" class="btn small ghost" id="moreDeals">Show ${Math.min(20, rows.length - dealsShown)} more</button>` : ''}`;
+  el.onclick = (e) => {
+    if (e.target.closest('#moreDeals')) { dealsShown += 20; renderDeals(); return; }
+    const b = e.target.closest('[data-deal]'); if (!b) return;
+    const o = deals.offers[Number(b.dataset.deal)];
+    state.candidates.push(blankCandidate({ year: String(o.year || ''), make: o.make, model: o.model, trim: o.trim || '', reason: `Factory lease: ${money(o.monthly)}/mo + ${money(o.dueAtSigning || 0)} due` }));
+    priceCandidate(state.candidates.length - 1);
+    b.disabled = true; b.textContent = 'Added';
+  };
+}
+
 // What the dealer would quote, in words: "$423/mo, $4,919 due" or "$811/mo for 60 mo".
 function payText(s) {
   if (!s) return '';
@@ -1571,6 +1645,8 @@ function wire() {
   document.addEventListener('click', (e) => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); setTab(g.dataset.goto); } });
   $('#suggest').addEventListener('click', addComparables);
   $('#priceAll').addEventListener('click', () => priceAll(false));
+  $('#findDeals').addEventListener('click', findDeals);
+  $('#dealsSuv').addEventListener('change', renderDeals);
   $('#segment').addEventListener('change', (e) => { state.segment = e.target.value; persist(); });
   for (const r of $$('input[name="plan"]')) r.addEventListener('change', () => { state.pricing.plan = r.value; renderResults(); renderModels(); persist(); });
   $('#planPct').addEventListener('input', (e) => { if (state.pricing.plan !== 'public') { state.pricing[state.pricing.plan] = e.target.value; scheduleResults(); } });
