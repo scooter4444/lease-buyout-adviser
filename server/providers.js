@@ -35,7 +35,7 @@ function describe(status, body) {
 
 // Free tiers allow ~5 calls/second: space live calls per provider (cache hits skip this).
 const nextSlot = {};
-async function pace(provider, gapMs = 260) {
+async function pace(provider, gapMs = 350) {
   const now = Date.now();
   const at = Math.max(now, nextSlot[provider] || 0);
   nextSlot[provider] = at + gapMs;
@@ -60,8 +60,8 @@ async function getJSON(provider, url, { headers = {}, ttl, cacheKey }, attempt =
   try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
   const safeUrl = url.replace(/(api_key|apiKey)=[^&]+/, '$1=***');
   console.log(`[${provider}] ${res.status} ${Date.now() - started}ms ${safeUrl} keys=${Object.keys(body || {}).slice(0, 12).join(',')}`);
-  if (res.status === 429 && attempt < 2) {
-    await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+  if (res.status === 429 && attempt < 4) {
+    await new Promise((r) => setTimeout(r, 1500 * 2 ** attempt));
     return getJSON(provider, url, { headers, ttl, cacheKey }, attempt + 1);
   }
   if (!res.ok) throw new ProviderError(provider, res.status, describe(res.status, body));
@@ -292,11 +292,28 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100,
   return { source: null, photo: null, count: 0, medianPrice: null, listings: [], errors };
 }
 
+// Offers for one make and ZIP. The by-make-and-ZIP endpoint is the one that returns the
+// local (MSA) programs; the generic /oem search with make+zip came back empty for every car.
 export async function incentives({ make, model, year, zip }) {
   if (!make) throw new ProviderError('app', 400, 'make is required');
-  const r = await attempt(() => mc('/v2/search/car/incentive/oem', { make, model, year, zip, rows: 10 }, DAY));
+  const slug = encodeURIComponent(String(make).toLowerCase());
+  const page = (start) => (zip
+    ? mc(`/v2/search/car/incentive/${slug}/${encodeURIComponent(zip)}`, { model, year, rows: 10, start }, DAY)
+    : mc('/v2/search/car/incentive/oem', { make, model, year, rows: 10, start }, DAY));
+  let r = await attempt(() => page(0));
+  if (r.ok && !(r.data?.listings || []).length && zip) {
+    // No local programs: fall back to the state's.
+    r = await attempt(() => mc('/v2/search/car/incentive/oem', { make, model, year, zip, radius: 100, rows: 10 }, DAY));
+  }
   if (!r.ok) return { offers: [], errors: [r.error] };
-  const offers = (r.data?.listings || []).map((x) => {
+  const listings = [...(r.data?.listings || [])];
+  // Up to two more pages (Ford often has 15–30 programs per model).
+  for (let start = 10; start < Math.min(30, r.data?.num_found || 0); start += 10) {
+    const more = await attempt(() => page(start));
+    if (!more.ok) break;
+    listings.push(...(more.data?.listings || []));
+  }
+  const offers = listings.map((x) => {
     const o = x.offer || {};
     const amt = o.amounts?.[0] || {};
     const term = amt.term ? (amt.term_unit === 'years' ? amt.term * 12 : amt.term) : null;
@@ -311,7 +328,11 @@ export async function incentives({ make, model, year, zip }) {
       dueAtSigning: o.due_at_signing ?? null,
       cashback: o.cashback_amount ?? null,
       group: o.cashback_target_group || null,
+      year: o.vehicles?.[0]?.year ?? null,
+      trim: o.vehicles?.[0]?.trim ?? null,
       msrp: o.msrp ?? null,
+      netCapCost: o.net_cap_cost ?? null,
+      downPayment: o.down_payment ?? null,
       residual: o.lease_end_purchase_price ?? null,
       mileageLimit: o.mileage_limit ?? null,
       overMileageFee: o.over_mileage_fee ?? null,
@@ -319,9 +340,15 @@ export async function incentives({ make, model, year, zip }) {
       acquisitionFee: o.acquisition_fee ?? null,
       validThrough: o.valid_through ?? null,
       disclaimer: o.disclaimers?.[0]?.slice(0, 400) ?? null,
+      // The fine print that matters for stacking, kept separately so it isn't cut off.
+      noSpecialApr: /not (?:compatible|combinable|available) with[^.]*(?:special|promo\w*)\s+(?:APR|lease|financ)/i.test((o.disclaimers || []).join(' ')),
+      requiresCaptive: /must be (?:financed|leased)[^.]*(?:NMAC|Ford Credit|Toyota Financial|American Honda|Hyundai Motor Finance|captive)|financed or leased through/i.test((o.disclaimers || []).join(' ')),
     };
   });
-  return { offers, count: r.data?.num_found ?? offers.length, errors: [] };
+  // The same program can show up twice across pages.
+  const seen = new Set();
+  const unique = offers.filter((o) => (seen.has(o.id) ? false : seen.add(o.id)));
+  return { offers: unique, count: r.data?.num_found ?? unique.length, errors: [] };
 }
 
 // ---------- auto.dev paid-plan extras (used only if the plan allows) ----------

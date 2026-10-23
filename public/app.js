@@ -1,4 +1,4 @@
-import { analyze, STATE_TAX, NO_TRADE_TAX_CREDIT, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
+import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
 import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
 
 // ---------- State ----------
@@ -201,7 +201,7 @@ function candidateHTML(c, i) {
       ${inp('lease.monthly', 'Monthly payment (before tax)', { pre: '$', placeholder: 'estimate', hint: 'Blank = estimated from price' })}${inp('lease.termMonths', 'Lease term', { suf: 'mo' })}
       ${inp('lease.dueAtSigning', 'Due at signing', { pre: '$', placeholder: 'first month + fees' })}${inp('lease.annualMileage', 'Miles allowed per year', { suf: 'mi', placeholder: '12000' })}
       ${inp('lease.overMileageFee', 'Over-mileage charge', { pre: '$', suf: '/mi', placeholder: '0.25' })}${inp('lease.dispositionFee', 'Turn-in fee', { pre: '$', placeholder: '395' })}
-      ${inp('lease.residualPct', 'Residual (for estimate)', { suf: '%', placeholder: '58' })}${inp('lease.moneyFactor', 'Money factor (for estimate)', { placeholder: '0.0025' })}
+      ${inp('lease.residualPct', 'Residual (for estimate)', { suf: '%', placeholder: '58' })}${inp('lease.moneyFactor', 'Money factor (for estimate)', { placeholder: '0.0018' })}
     </div>`}
     ${c.condition && c.condition !== 'new' ? `<div class="grid" style="margin-top:12px">${inp('miles', 'Odometer', { suf: 'mi' })}</div>` : ''}
   </div>`;
@@ -316,7 +316,9 @@ function offerSummary(c) {
   const sel = selection(c);
   const n = (c.offers || []).length;
   const lease = (c.offers || []).find((o) => o.id === sel.lease);
-  const picked = [c.buyNote, lease ? `Lease: $${lease.monthly}/mo for ${lease.term} mo.` : ''].filter(Boolean).join(' ');
+  const lt = lease ? leaseTermsFromOffer(lease) : null;
+  const leaseTxt = lease ? `Lease${lease.year || lease.trim ? ` (${[lease.year, lease.trim].filter(Boolean).join(' ')})` : ''}: $${lease.monthly}/mo for ${lease.term} mo, ${money(lease.dueAtSigning || 0)} due${lt ? `; factory rate ${lt.moneyFactor.toFixed(5)} (${(lt.moneyFactor * 2400).toFixed(1)}% APR), residual ${lt.residualPct}%` : ''}.` : '';
+  const picked = [c.buyNote, leaseTxt].filter(Boolean).join(' ');
   return `${picked || 'No offers selected.'} ${n} offer${n === 1 ? '' : 's'} available; change them in Price, offers and terms.`;
 }
 
@@ -331,16 +333,16 @@ function summaryHTML(x, buyout) {
       ${c.status ? `<p class="status ${c.statusErr ? 'err' : ''}">${esc(c.status)}</p>` : '<p class="hint">Not priced yet.</p>'}
       <div class="mc-actions"><button type="button" class="btn primary small" data-price="${i}">Get prices &amp; offers</button>${remove}</div>`;
   }
-  const delta = buyout ? best.perMonth - buyout.perMonth : null;
+  const delta = buyout ? best.carPerMonth - buyout.carPerMonth : null;
   const eff = effectivePrice(c);
   const plan = azEligible(c) && planPct() ? `${state.pricing.plan}-Plan price` : 'Typical local price';
   return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}<span class="mc-rank">${x.rank}</span></div>
       <div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div>
-      <div class="mc-cost"><b>${money(best.perMonth)}</b><small>per month, all in, ${best.kind === 'lease' ? 'leased' : 'bought'}</small></div></header>
+      <div class="mc-cost"><b>${money(best.carPerMonth)}</b><small>a month for the car, ${best.kind === 'lease' ? 'leased' : 'bought'}</small></div></header>
     ${delta != null ? `<p class="mc-vs ${delta > 0 ? 'neg' : 'pos'}">${delta > 0 ? `${money(delta)}/mo more` : `${money(-delta)}/mo less`} than buying out your ${esc(curLabel())}</p>` : ''}
     <dl class="mc-grid">
-      ${buy ? `<div><dt>Buy</dt><dd>${money(buy.perMonth)}<small>/mo</small></dd><p>payment ${money(buy.monthlyPayment)}${c.buy.payCash ? ' (cash)' : ''}</p></div>` : ''}
-      ${lease ? `<div><dt>Lease</dt><dd>${money(lease.perMonth)}<small>/mo</small></dd><p>payment ${money(lease.monthlyPayment)}, ${money(Math.max(0, lease.upfront))} due${lease.estimated ? ', estimated' : ''}</p></div>` : ''}
+      ${buy ? `<div><dt>Buy</dt><dd>${money(buy.carPerMonth)}<small>/mo</small></dd><p>${c.buy.payCash ? 'paid in cash' : `payment ${esc(payText(buy))}`}</p></div>` : ''}
+      ${lease ? `<div><dt>Lease${lease.estimated ? ' (estimate)' : ''}</dt><dd>${money(lease.carPerMonth)}<small>/mo</small></dd><p>${esc(payText(lease))}${lease.estimated ? ', no factory deal found' : ''}</p></div>` : ''}
       <div><dt>${plan}</dt><dd>${money(eff)}</dd><p>MSRP ${money(Number(c.msrp) || null)}</p></div>
       <div><dt>Fuel economy</dt><dd>${c.mpg ? `${esc(c.mpg)}<small> mpg</small>` : '—'}</dd><p>${c.market?.count ? `${c.market.count.toLocaleString()} for sale near you` : '&nbsp;'}</p></div>
     </dl>
@@ -353,8 +355,8 @@ function compareChart(priced, buyout) {
   if (!priced.length) return '';
   const W = Math.round(Math.min(760, Math.max(300, ($('#modelCompare').clientWidth || 600)))), rowH = 40, left = W < 480 ? 108 : 150, right = 14, top = 22;
   const H = top + priced.length * rowH + 22;
-  const vals = priced.flatMap((x) => [x.buy?.perMonth, x.lease?.perMonth]).filter(Number.isFinite);
-  if (buyout) vals.push(buyout.perMonth);
+  const vals = priced.flatMap((x) => [x.buy?.carPerMonth, x.lease?.carPerMonth]).filter(Number.isFinite);
+  if (buyout) vals.push(buyout.carPerMonth);
   const lo = Math.min(0, ...vals), hi = Math.max(...vals) * 1.06;
   const xs = (v) => left + ((v - lo) / (hi - lo || 1)) * (W - left - right);
   const ticks = niceTicks(lo, hi, 4);
@@ -364,12 +366,12 @@ function compareChart(priced, buyout) {
   priced.forEach((x, k) => {
     const y = top + k * rowH;
     svg += `<text x="${left - 8}" y="${y + 20}" text-anchor="end">${esc(trunc(carName(x.c), W < 480 ? 15 : 22))}</text>`;
-    if (x.buy) svg += `<rect x="${xs(lo)}" y="${y + 4}" width="${Math.max(0, xs(x.buy.perMonth) - xs(lo))}" height="14" rx="2" fill="var(--s1)"><title>Buy: ${money(x.buy.perMonth)}/mo</title></rect>`;
-    if (x.lease) svg += `<rect x="${xs(lo)}" y="${y + 20}" width="${Math.max(0, xs(x.lease.perMonth) - xs(lo))}" height="14" rx="2" fill="var(--s3)"><title>Lease: ${money(x.lease.perMonth)}/mo</title></rect>`;
+    if (x.buy) svg += `<rect x="${xs(lo)}" y="${y + 4}" width="${Math.max(0, xs(x.buy.carPerMonth) - xs(lo))}" height="14" rx="2" fill="var(--s1)"><title>Buy: ${money(x.buy.carPerMonth)}/mo</title></rect>`;
+    if (x.lease) svg += `<rect x="${xs(lo)}" y="${y + 20}" width="${Math.max(0, xs(x.lease.carPerMonth) - xs(lo))}" height="14" rx="2" fill="var(--s3)"><title>Lease: ${money(x.lease.carPerMonth)}/mo</title></rect>`;
   });
   if (buyout) {
-    const bx = xs(buyout.perMonth);
-    svg += `<line x1="${bx}" x2="${bx}" y1="${top - 6}" y2="${H - 18}" stroke="var(--go)" stroke-width="2.5"/><text x="${bx}" y="${top - 10}" text-anchor="${bx > W - 120 ? 'end' : 'middle'}" style="fill:var(--go);font-weight:650">Buy out ${esc(trunc(curLabel(), 16))}: ${money(buyout.perMonth)}</text>`;
+    const bx = xs(buyout.carPerMonth);
+    svg += `<line x1="${bx}" x2="${bx}" y1="${top - 6}" y2="${H - 18}" stroke="var(--go)" stroke-width="2.5"/><text x="${bx}" y="${top - 10}" text-anchor="${bx > W - 120 ? 'end' : 'middle'}" style="fill:var(--go);font-weight:650">Buy out ${esc(trunc(curLabel(), 16))}: ${money(buyout.carPerMonth)}</text>`;
   }
   svg += '</svg>';
   return `<div class="compare-chart">${svg}<div class="legend"><span><i style="background:var(--s1)"></i>Buy</span><span><i style="background:var(--s3)"></i>Lease</span><span><i class="line" style="background:var(--go)"></i>Buying out your current car</span></div></div>`;
@@ -385,7 +387,7 @@ function renderModels() {
   const { rows, buyout, priced } = modelRows();
   const lede = $('#modelsLede');
   lede.textContent = buyout
-    ? `Ranked by all-in monthly cost over ${fmtYears(lastAnalysis.horizonMonths)}. The green line is buying out your ${curLabel()} at ${money(buyout.perMonth)}/mo.`
+    ? `What each car costs a month over ${fmtYears(lastAnalysis.horizonMonths)}: payments, money down, taxes and fees, minus what it’s worth at the end. Gas, insurance and upkeep are left out here (they’re in each card and the ranking). The green line is buying out your ${curLabel()} at ${money(buyout.carPerMonth)}/mo.`
     : 'Every model is priced as a purchase and a lease with local dealer prices and current manufacturer offers, then ranked by what it really costs per month.';
   $('#modelCompare').innerHTML = (rows.length ? compareChart(priced, buyout) : `<div class="empty small"><p>No models yet. Tap <b>Add comparable models</b> to fill this with the cars that compete with your ${esc(curLabel())}.</p></div>`)
     + rows.map((x) => `<article class="mc ${x.rank === 1 ? 'first' : ''}" data-card="${x.i}">
@@ -478,8 +480,8 @@ function renderResults() {
     const tv = Math.abs(s.timeValue) >= 1 ? `<tr><td>Time value of money (${r.assumptions.discountRatePct}%)</td><td>${money(s.timeValue)}</td></tr>` : '';
     return `<li class="${i === 0 ? 'best' : ''}">
       <span class="t">${esc(s.title)}${s.estimated ? ' <span class="tag">estimated payment</span>' : ''}</span>
-      <span class="m"><b>${money(s.perMonth)}</b><small>per month, all in</small></span>
-      <span class="d"><span>${money(s.pvCost)} over ${fmtYears(H)}</span><span>${money(s.perMile, 2)}/mile</span>${s.monthlyPayment ? `<span>payment ${money(s.monthlyPayment)}/mo</span>` : ''}<span>${s.upfront >= 0 ? `${money(s.upfront)} upfront` : `${money(-s.upfront)} back at start`}</span></span>
+      <span class="m"><b>${money(s.carPerMonth)}</b><small>a month for the car</small></span>
+      <span class="d">${payText(s) ? `<span>${esc(payText(s))}</span>` : ''}<span>+ ${money(s.runningPerMonth)}/mo gas, insurance, upkeep</span><span>${money(s.perMonth)}/mo all in</span>${s.upfront < 0 ? `<span>${money(-s.upfront)} back at start</span>` : ''}</span>
       <details><summary>Where the money goes</summary>
         <table>${cats}${tv}<tr><td><b>Total</b></td><td><b>${money(s.pvCost)}</b></td></tr></table>
         <ul class="notes">${s.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
@@ -493,12 +495,12 @@ function renderResults() {
       <div class="band"><span>${deadlineShort(state) ? esc(deadlineShort(state)) : 'Recommendation'}</span><span>${H / 12} yrs, ${Math.round(Number(r.assumptions.annualMiles) / 1000)}k mi/yr</span></div>
       <div class="verdict ${winnerPhoto(best) ? 'with-ph' : ''}"><h1>${esc(v.headline)}</h1>${winnerPhoto(best) ? `<figure>${imgHTML(winnerPhoto(best).url, best.vehicle, phCls(winnerPhoto(best), 'win-ph'))}${winnerPhoto(best).exact ? '' : '<figcaption>Similar car, photo from a local listing</figcaption>'}</figure>` : ''}</div>
       <div class="figures">
-        <div><b>${money(best.perMonth)}</b><span>per month, all in</span></div>
-        <div><b>${money(best.pvCost)}</b><span>total over ${fmtYears(H)}</span></div>
+        <div><b>${money(best.carPerMonth)}</b><span>a month for the car</span></div>
+        <div><b>${payText(best) ? esc(payText(best).replace(/ for \d+ mo$/, '')) : 'Paid off'}</b><span>${best.kind === 'lease' ? 'payment + due at signing' : best.monthlyPayment ? 'loan payment' : 'no payment'}</span></div>
         <div><b>${r.scenarios[1] ? money(r.scenarios[1].pvCost - best.pvCost) : '—'}</b><span>saved vs. next best</span></div>
       </div>
       ${v.lines.length ? `<ul>${v.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
-      <p class="fine">“All in” is the true cost of driving: payments, interest, taxes, insurance, fuel, maintenance and lost value, minus what the car is worth when you’re done.</p>
+      <p class="fine">“For the car” is what you’d hold up against a lease payment: payments, money down, interest, taxes and fees, minus what the car is worth when you’re done, spread over ${fmtYears(H)}. Gas, insurance and upkeep (about ${money(best.runningPerMonth)}/mo here) come on top; the ranking counts them too.</p>
     </article>
 
     ${repriceBannerHTML()}
@@ -844,7 +846,7 @@ function profileVerdict(p) {
     const r = analyze(analysisInput(p.candidates, {}, p));
     const best = r.scenarios[0];
     if (!best) return null;
-    return { short: verdictShort(best), perMonth: best.perMonth, compared: r.scenarios.length - 1 };
+    return { short: verdictShort(best), perMonth: best.perMonth, carPerMonth: best.carPerMonth, compared: r.scenarios.length - 1 };
   } catch { return null; }
 }
 
@@ -861,7 +863,7 @@ function renderGarage() {
           <small>${esc(sub || 'No car details yet')}</small>
           ${deadlineText(p) ? `<small class="g-deadline">${esc(deadlineText(p))}</small>` : ''}
         </div>
-        ${v ? `<div class="g-verdict"><span class="tag offer-tag">${esc(v.short)}</span><small>${money(v.perMonth)}/mo all in</small></div>` : ''}
+        ${v ? `<div class="g-verdict"><span class="tag offer-tag">${esc(v.short)}</span><small>${money(v.carPerMonth)}/mo for the car</small></div>` : ''}
       </button>
       <div class="g-actions"><button type="button" class="btn ghost small" data-rename="${id}">Rename</button>${Object.keys(store.profiles).length > 1 ? `<button type="button" class="btn ghost small" data-delete="${id}">Delete</button>` : ''}</div>
     </article>`;
@@ -1139,6 +1141,14 @@ function renderIdeas() {
   };
 }
 
+// What the dealer would quote, in words: "$423/mo, $4,919 due" or "$811/mo for 60 mo".
+function payText(s) {
+  if (!s) return '';
+  if (s.kind === 'lease') return `${money(s.monthlyPayment)}/mo + ${money(Math.max(0, s.upfront))} due`;
+  if (s.monthlyPayment) return `${money(s.monthlyPayment)}/mo${s.loanTerm ? ` for ${s.loanTerm} mo` : ''}${s.upfront > 1 ? `, ${money(s.upfront)} down` : ''}`;
+  return s.upfront > 1 ? `${money(s.upfront)} cash` : '';
+}
+
 // ---------- Pricing plans (Ford A/Z-Plan) ----------
 const planPct = (p = state) => (p.pricing.plan === 'public' ? 0 : Number(p.pricing[p.pricing.plan]) || 0);
 const azEligible = (c) => AZ_MAKES.has(String(c.make || '').toLowerCase());
@@ -1296,11 +1306,16 @@ function stackedCash(c) {
   const ids = new Set(selection(c).cash);
   return (c.offers || []).filter((o) => offerKind(o) === 'cash' && ids.has(o.id)).reduce((t, o) => t + (o.cashback || 0), 0);
 }
-// Default cash: everything you likely qualify for, each manufacturer program counted once.
-function defaultCash(c) {
+// Model year an offer is for (offers for different model years never stack).
+const offerYear = (o) => Number(o.year) || Number(String(o.vehicles?.[0] || '').match(/^(20\d\d)\b/)?.[1]) || null;
+const yearOk = (o, y) => !y || !offerYear(o) || offerYear(o) === y;
+// Default cash: everything you likely qualify for, each manufacturer program counted once,
+// all for one model year, and none that the fine print says can't go with a special APR.
+function defaultCash(c, year = Number(c.year) || null, withApr = false) {
   const sameBrand = String(c.make).toLowerCase() === String(state.current.make).toLowerCase();
-  const cash = (c.offers || []).filter((o) => offerKind(o) === 'cash' && o.cashback > 0)
+  const cash = (c.offers || []).filter((o) => offerKind(o) === 'cash' && o.cashback > 0 && yearOk(o, year))
     .filter((o) => !isAffinity(o) && (!isLoyalty(o) || sameBrand) && (!isConquest(o) || !sameBrand))
+    .filter((o) => !(withApr && o.noSpecialApr))
     .sort((a, b) => pgmsOf(a).length - pgmsOf(b).length || b.cashback - a.cashback);
   const covered = new Set(), titles = new Set(), picked = [];
   for (const o of cash) {
@@ -1312,7 +1327,6 @@ function defaultCash(c) {
   }
   return picked;
 }
-// Push the current selection into the buy/lease numbers the engine uses.
 function applySelection(c) {
   const sel = selection(c);
   const total = stackedCash(c);
@@ -1320,25 +1334,34 @@ function applySelection(c) {
   c.buy = { ...c.buy, rebate: total ? String(total) : '', apr: fin ? String(fin.apr) : '', termMonths: fin ? String(fin.term || 60) : '60', source: total || fin ? 'offer' : 'estimate' };
   const lease = (c.offers || []).find((o) => o.id === sel.lease);
   if (lease) applyLeaseOffer(c, lease);
+  else if (c.lease.source === 'offer') c.lease = { ...c.lease, monthly: '', dueAtSigning: '', moneyFactor: '', residualPct: '', source: 'estimate' };
   const parts = (c.offers || []).filter((o) => sel.cash.includes(o.id)).map((o) => `${money(o.cashback)} ${cashLabel(o)}`);
-  c.buyNote = parts.length || fin ? `Using ${[parts.join(' + '), fin ? `${fin.apr}% for ${fin.term} months` : ''].filter(Boolean).join(', plus ')}.` : '';
+  const yr = sel.year ? `${sel.year} model: ` : '';
+  c.buyNote = parts.length || fin ? `${yr}using ${[parts.join(' + '), fin ? `${fin.apr}% for ${fin.term} months` : ''].filter(Boolean).join(', plus ')}.` : '';
+  c.buyNote = c.buyNote && c.buyNote[0].toUpperCase() + c.buyNote.slice(1);
 }
-// Defaults: stack all eligible cash, then whichever APR (or none) costs least with it, and the cheapest lease.
+// Defaults: for each model year with offers, stack its eligible cash, try each of its APRs
+// (dropping cash that can't go with one), keep the cheapest; then the cheapest lease.
 function autoPick(c) {
   if (c.userPicked) { applySelection(c); return; }
   const sel = selection(c);
-  sel.cash = defaultCash(c);
   const cost = (variant, kind) => analyze(analysisInput([variant])).scenarios.find((x) => x.kind === kind)?.pvCost ?? Infinity;
-  let best = { id: null, pv: Infinity };
-  for (const f of [null, ...(c.offers || []).filter((o) => offerKind(o) === 'finance' && o.apr != null)]) {
-    const tmp = { ...c, buy: { ...c.buy }, lease: { ...c.lease, enabled: false }, selected: { ...sel, finance: f ? f.id : null } };
-    applySelection(tmp);
-    const pv = cost(tmp, 'buy');
-    if (pv < best.pv) best = { id: f ? f.id : null, pv };
+  const fixed = Number(c.year) || null;
+  const years = fixed ? [fixed] : [...new Set((c.offers || []).map(offerYear).filter(Boolean))];
+  if (!years.length) years.push(null);
+  let best = { pv: Infinity, cash: [], finance: null, year: null };
+  for (const y of years) {
+    for (const f of [null, ...(c.offers || []).filter((o) => offerKind(o) === 'finance' && o.apr != null && yearOk(o, y))]) {
+      const cash = defaultCash(c, y, !!f);
+      const tmp = { ...c, buy: { ...c.buy }, lease: { ...c.lease, enabled: false }, selected: { cash, finance: f ? f.id : null, lease: null } };
+      applySelection(tmp);
+      const pv = cost(tmp, 'buy');
+      if (pv < best.pv) best = { pv, cash, finance: f ? f.id : null, year: y };
+    }
   }
-  sel.finance = best.id;
+  sel.cash = best.cash; sel.finance = best.finance; sel.year = best.year;
   let bestLease = { id: null, pv: Infinity };
-  for (const o of (c.offers || []).filter((x) => offerKind(x) === 'lease' && x.monthly)) {
+  for (const o of (c.offers || []).filter((x) => offerKind(x) === 'lease' && x.monthly && yearOk(x, fixed))) {
     const tmp = { ...c, lease: { ...c.lease }, buy: { ...c.buy, enabled: false } };
     applyLeaseOffer(tmp, o);
     const pv = cost(tmp, 'lease');
@@ -1399,7 +1422,7 @@ function askContext() {
     recalls: (state.lookup?.recalls || []).map((x) => ({ title: x.title, status: x.status })).slice(0, 8),
     equity: r ? Object.fromEntries(Object.entries(r.equity).map(([k, v]) => [k, typeof v === 'number' ? round(v) : v])) : null,
     verdict: r?.verdict || null,
-    optionsCheapestFirst: (r?.scenarios || []).map((x) => ({ option: x.title, allInPerMonth: round(x.perMonth), totalOverHorizon: round(x.pvCost), payment: round(x.monthlyPayment), upfront: round(x.upfront), worthAtEnd: round(x.valueAtEnd), estimatedPayment: !!x.estimated, notes: x.notes })),
+    optionsCheapestFirst: (r?.scenarios || []).map((x) => ({ option: x.title, carCostPerMonth: round(x.carPerMonth), runningCostsPerMonth: round(x.runningPerMonth), allInPerMonth: round(x.perMonth), totalOverHorizon: round(x.pvCost), payment: round(x.monthlyPayment), upfront: round(x.upfront), worthAtEnd: round(x.valueAtEnd), estimatedPayment: !!x.estimated, notes: x.notes })),
     newCarsCompared: state.candidates.map((x) => ({ name: [x.year, x.make, x.model, x.trim].filter(Boolean).join(' '), whySuggested: x.reason || null, priceUsed: effectivePrice(x), streetPrice: Number(x.sellingPrice) || null, msrp: Number(x.msrp) || null, mpg: x.mpg || null, forSaleNearby: x.market?.count ?? null, offers: (x.offers || []).slice(0, 8).map((o) => ({ type: o.type, monthly: o.monthly, apr: o.apr, term: o.term, dueAtSigning: o.dueAtSigning, cashBack: o.cashback, forWho: o.group, ends: o.validThrough })) })),
     assumptionsNote: 'All-in monthly = payments, interest, taxes, fees, registration, insurance, fuel and maintenance, minus resale value at the end, spread over the horizon, discounted at 4%/yr.',
   };
@@ -1472,7 +1495,10 @@ function setTab(t, { scroll = true } = {}) {
 }
 
 function applyLeaseOffer(c, o) {
+  const t = leaseTermsFromOffer(o);
   Object.assign(c.lease, {
+    moneyFactor: t ? String(t.moneyFactor) : '', residualPct: t?.residualPct ? String(t.residualPct) : '',
+    offerLabel: [o.year, o.trim].filter(Boolean).join(' '),
     monthly: String(o.monthly), termMonths: String(o.term || 36),
     dueAtSigning: o.dueAtSigning != null ? String(o.dueAtSigning) : '',
     annualMileage: o.mileageLimit ? String(Math.round(o.mileageLimit >= 16000 ? o.mileageLimit / ((o.term || 36) / 12) : o.mileageLimit)) : c.lease.annualMileage,

@@ -63,15 +63,15 @@
           <div class="band"><span>${days != null && days >= 0 ? `Decide by ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${days} days` : 'Recommendation'}</span><span>${r.horizonMonths / 12} yrs</span></div>
           <div class="verdict ${photo ? 'with-ph' : ''}"><h1>${esc(r.verdict.headline)}</h1>${photo}</div>
           <div class="figures">
-            <div><b>${money(best.perMonth)}</b><span>per month, all in</span></div>
+            <div><b>${money(best.carPerMonth)}</b><span>a month for the car</span></div>
             <div><b>${money(Number(c.buyoutPrice))}</b><span>buyout price</span></div>
             <div><b>${second ? money(second.pvCost - best.pvCost) : '—'}</b><span>saved vs. next best</span></div>
           </div>
           ${r.verdict.lines.length ? `<ul>${r.verdict.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
         </article>
         <h2>Every option, cheapest first</h2>
-        ${r.scenarios.slice(0, 8).map((s, i) => `<div class="opt ${i === 0 ? 'best' : ''}"><b>${esc(s.title)}</b><span class="m">${money(s.perMonth)}/mo</span><small>${money(s.pvCost)} over ${fmtYears(r.horizonMonths)}${s.monthlyPayment ? `, payment ${money(s.monthlyPayment)}/mo` : ''}</small></div>`).join('')}
-        <p class="fine">“All in” counts payments, interest, taxes, fees, insurance, gas and upkeep, minus what the car is worth at the end. ${[c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')}, ${Number(c.currentMiles || 0).toLocaleString()} miles. ${p.repricedAt ? `Prices checked ${new Date(p.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : ''} Estimates, not offers.</p>`;
+        ${r.scenarios.slice(0, 8).map((s, i) => `<div class="opt ${i === 0 ? 'best' : ''}"><b>${esc(s.title)}</b><span class="m">${money(s.carPerMonth)}/mo</span><small>${s.monthlyPayment ? `payment ${money(s.monthlyPayment)}/mo${s.kind === 'lease' ? ` + ${money(Math.max(0, s.upfront))} due` : ''}, ` : ''}${money(s.perMonth)}/mo with gas, insurance and upkeep</small></div>`).join('')}
+        <p class="fine">“For the car” counts payments, money down, interest, taxes and fees, minus what the car is worth at the end, spread over ${fmtYears(r.horizonMonths)}. Gas, insurance and upkeep come on top, and the ranking counts them too. ${[c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')}, ${Number(c.currentMiles || 0).toLocaleString()} miles. ${p.repricedAt ? `Prices checked ${new Date(p.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : ''} Estimates, not offers.</p>`;
     } catch (e) {
       $('#share').innerHTML = `<div class="share-top">${logo}<span>Lease Buyout Advisor</span></div><div class="empty"><p>${esc(e.message)}</p></div>`;
     }

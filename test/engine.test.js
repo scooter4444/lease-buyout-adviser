@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  analyze, loanPayment, loanStatus, retention, estimateLeasePayment, coloradoRegistration, normalize, leaseExit,
+  analyze, loanPayment, loanStatus, retention, estimateLeasePayment, coloradoRegistration, normalize, leaseExit, leaseTermsFromOffer,
 } from '../public/engine.js';
 
 const TODAY = '2026-10-23';
@@ -131,4 +131,25 @@ test('used and certified candidates: no lease, value follows the curve from curr
   assert.match(u.title, /buy used/);
   const sum = Object.values(u.breakdown).reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(sum - u.netCost) < 0.01);
+});
+
+test('lease rate worked back from the Nissan Murano SL offer (Bloomfield Hills, Oct 2026)', () => {
+  // $399/mo, 36 mo, net cap $42,305, residual $28,004, MSRP $49,130
+  const t = leaseTermsFromOffer({ monthly: 399, term: 36, netCapCost: 42305, residual: 28004, msrp: 49130 });
+  assert.ok(t.moneyFactor < 0.0001, `MF ${t.moneyFactor}`);
+  assert.equal(t.residualPct, 57);
+});
+
+test('car cost plus gas/insurance/upkeep adds up to all-in, and a real lease offer is used as given', () => {
+  const r = analyze({
+    current: { make: 'Ford', model: 'Edge', year: '2024', buyoutPrice: '24481', marketValue: '23935', currentMiles: '25000', mpg: '23' },
+    assumptions: { state: 'MI', horizonYears: '3', annualMiles: '10000', salesTaxPct: '6', leaseTaxPct: '6' },
+    candidates: [{ id: 'm', make: 'Nissan', model: 'Murano', sellingPrice: '46289', msrp: '50850', mpg: '24', buy: { enabled: false }, lease: { enabled: true, monthly: '399', termMonths: '36', dueAtSigning: '4919', annualMileage: '10000' } }],
+  });
+  for (const s of r.scenarios) assert.ok(Math.abs(s.carPerMonth + s.runningPerMonth - s.perMonth) < 0.01);
+  const lease = r.scenarios.find((s) => s.kind === 'lease');
+  assert.ok(!lease.estimated);
+  assert.ok(Math.abs(lease.monthlyPayment - 399 * 1.06) < 0.01);
+  // 36 payments of $423 + $4,919 down ≈ $560/mo before the time value of money
+  assert.ok(lease.carPerMonth > 520 && lease.carPerMonth < 600, `car ${lease.carPerMonth}`);
 });

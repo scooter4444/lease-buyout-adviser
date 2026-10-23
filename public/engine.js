@@ -104,12 +104,25 @@ export function loanStatus(principal, aprPct, termMonths, k) {
   return { payment: pmt, interest, balance: Math.max(0, bal) };
 }
 
-export function estimateLeasePayment({ sellingPrice, msrp, termMonths = 36, residualPct, moneyFactor = 0.0025, acquisitionFee = 695, capReduction = 0, leaseCash = 0 }) {
+export function estimateLeasePayment({ sellingPrice, msrp, termMonths = 36, residualPct, moneyFactor = DEFAULT_MF, acquisitionFee = 695, capReduction = 0, leaseCash = 0 }) {
   const res = (residualPct ?? defaultResidualPct(termMonths)) / 100 * msrp;
   const cap = sellingPrice + acquisitionFee - capReduction - leaseCash;
   const depreciation = (cap - res) / termMonths;
   const rent = (cap + res) * moneyFactor;
   return { monthly: Math.max(0, depreciation + rent), residual: res, capCost: cap };
+}
+
+// Lease rate used only when no factory lease deal was found. Captive lenders' October 2026 buy
+// rates run from ~0.00002 (Nissan, Mazda specials) to ~0.0023 (Hyundai); 0.0018 (about 4.3% APR)
+// is a middle-of-the-market rate, not a subsidized one.
+export const DEFAULT_MF = 0.0018;
+
+// The factory's own lease rate and residual, worked back from an advertised deal the way
+// Leasehackr does it: payment = (net cap − residual)/term + (net cap + residual) × MF.
+export function leaseTermsFromOffer({ monthly, term = 36, netCapCost, residual, msrp }) {
+  if (!(netCapCost > 0 && residual > 0 && monthly > 0)) return null;
+  const mf = (monthly - (netCapCost - residual) / term) / (netCapCost + residual);
+  return { moneyFactor: Math.max(0, Math.round(mf * 1e6) / 1e6), residualPct: msrp ? Math.round((residual / msrp) * 1000) / 10 : null };
 }
 
 export function defaultResidualPct(termMonths) {
@@ -243,7 +256,7 @@ export function normalize(input = {}) {
         overMileageFee: num(v.lease?.overMileageFee, 0.25),
         dispositionFee: num(v.lease?.dispositionFee, 395),
         residualPct: v.lease?.residualPct !== undefined && v.lease?.residualPct !== '' ? num(v.lease.residualPct) : null,
-        moneyFactor: num(v.lease?.moneyFactor, 0.0025),
+        moneyFactor: num(v.lease?.moneyFactor, DEFAULT_MF),
         acquisitionFee: num(v.lease?.acquisitionFee, 695),
         source: v.lease?.source || 'estimate',
       },
@@ -310,13 +323,15 @@ function newValueAt(v, months, annualMiles) {
 
 // ---------- Scenario builders ----------
 
+export const RUNNING = new Set(['Insurance', 'Fuel', 'Maintenance & repairs']);
+
 class Flows {
   constructor(H) { this.H = H; this.items = []; }
   add(month, amount, category) { if (amount) this.items.push({ month, amount, category }); }
   nominal() { return this.items.reduce((s, f) => s + f.amount, 0); }
-  pv(ratePct) {
+  pv(ratePct, keep = () => true) {
     const r = Math.pow(1 + ratePct / 100, 1 / 12) - 1;
-    return this.items.reduce((s, f) => s + f.amount / Math.pow(1 + r, f.month), 0);
+    return this.items.reduce((s, f) => (keep(f) ? s + f.amount / Math.pow(1 + r, f.month) : s), 0);
   }
   byCategory() {
     const out = {};
@@ -369,12 +384,18 @@ function finish(flows, a, meta) {
   const pv = flows.pv(a.discountRatePct);
   const cats = flows.byCategory();
   const H = flows.H;
+  // "Car cost": what the car itself costs you (payments, cash down, interest, taxes, fees,
+  // registration, lease-end charges, minus what it's worth at the end). This is the number to
+  // hold up against a lease payment. Gas, insurance and upkeep come on top; the ranking uses both.
+  const carPv = flows.pv(a.discountRatePct, (f) => !RUNNING.has(f.category));
   return {
     ...meta,
     netCost: nominal,
     pvCost: pv,
     timeValue: pv - nominal,
     perMonth: pv / H,
+    carPerMonth: carPv / H,
+    runningPerMonth: (pv - carPv) / H,
     perMile: pv / ((a.annualMiles / 12) * H),
     breakdown: cats,
     flows: flows.items,
@@ -407,6 +428,7 @@ export function buyoutScenario(n, H) {
     vehicle: c.label,
     upfront: c.payCash ? c.buyoutPrice + taxesFees : Math.min(c.downPayment, c.buyoutPrice + taxesFees),
     monthlyPayment: loan.payment,
+    loanTerm: c.payCash ? 0 : c.termMonths,
     valueAtEnd,
     balanceAtEnd: loan.balanceAtEnd,
     insurance,
@@ -448,6 +470,7 @@ export function buyNewScenario(n, v, H, exit) {
     vehicle: v.label,
     upfront: (v.buy.payCash ? price + taxesFees : v.buy.downPayment) - exit.cashAtExit,
     monthlyPayment: loan.payment,
+    loanTerm: v.buy.payCash ? 0 : v.buy.termMonths,
     valueAtEnd,
     balanceAtEnd: loan.balanceAtEnd,
     insurance,
