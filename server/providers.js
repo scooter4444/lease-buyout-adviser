@@ -33,10 +33,20 @@ function describe(status, body) {
   return `HTTP ${status}${msg ? `: ${String(msg).slice(0, 160)}` : ''}`;
 }
 
-async function getJSON(provider, url, { headers = {}, ttl, cacheKey }) {
+// Free tiers allow ~5 calls/second: space live calls per provider (cache hits skip this).
+const nextSlot = {};
+async function pace(provider, gapMs = 260) {
+  const now = Date.now();
+  const at = Math.max(now, nextSlot[provider] || 0);
+  nextSlot[provider] = at + gapMs;
+  if (at > now) await new Promise((r) => setTimeout(r, at - now));
+}
+
+async function getJSON(provider, url, { headers = {}, ttl, cacheKey }, attempt = 0) {
   const key = cacheKey || `${provider}:${url.replace(/(api_key|apiKey)=[^&]+/, '')}`;
   const hit = getCached(key);
   if (hit !== undefined) return hit;
+  await pace(provider);
   countCall(provider);
   const started = Date.now();
   let res;
@@ -50,6 +60,10 @@ async function getJSON(provider, url, { headers = {}, ttl, cacheKey }) {
   try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
   const safeUrl = url.replace(/(api_key|apiKey)=[^&]+/, '$1=***');
   console.log(`[${provider}] ${res.status} ${Date.now() - started}ms ${safeUrl} keys=${Object.keys(body || {}).slice(0, 12).join(',')}`);
+  if (res.status === 429 && attempt < 2) {
+    await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+    return getJSON(provider, url, { headers, ttl, cacheKey }, attempt + 1);
+  }
   if (!res.ok) throw new ProviderError(provider, res.status, describe(res.status, body));
   setCached(key, body, ttl);
   return body;
