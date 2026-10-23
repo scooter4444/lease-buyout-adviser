@@ -13,10 +13,14 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '2mb' }));
 
-// Optional password gate (HTTP Basic). Keeps strangers from spending your API quota.
+// Keep the app out of search engines: link-only access.
+app.use((_req, res, next) => { res.set('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet'); next(); });
+app.get('/robots.txt', (_req, res) => res.type('text/plain').send('User-agent: *\nDisallow: /\n'));
+
+// Optional password gate (HTTP Basic), off unless APP_PASSWORD is set.
 const PASSWORD = process.env.APP_PASSWORD;
 app.use((req, res, next) => {
-  if (!PASSWORD || req.path === '/api/health') return next();
+  if (!PASSWORD || req.path === '/api/health' || req.path === '/robots.txt') return next();
   const [scheme, encoded] = (req.headers.authorization || '').split(' ');
   if (scheme === 'Basic' && encoded) {
     const pass = Buffer.from(encoded, 'base64').toString().split(':').slice(1).join(':');
