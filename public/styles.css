@@ -777,3 +777,37 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
 .s-stage .ph-empty { width: 220px; max-width: 60%; height: 110px; border-radius: var(--r-md); }
 .s-match b { white-space: nowrap; }
 .s-stage .ph:not(.ph-empty) { width: auto; max-width: min(320px, 85%); height: 140px; border-radius: var(--r-sm); }
+/* Five views: scroll sideways on phones instead of squeezing. */
+.s-views { display: flex; overflow-x: auto; scrollbar-width: none; }
+.s-views button { flex: 1 0 auto; }
+/* Photos: walkaround and side by side */
+.g-wait { display: flex; align-items: center; gap: 12px; padding: 28px 18px; background: var(--surface); border-radius: var(--r-lg); color: var(--ink-soft); font-size: 0.9rem; line-height: 1.4; }
+.g-wait .spinner { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2.5px solid var(--hair-strong); border-top-color: var(--ink); animation: g-spin 0.9s linear infinite; }
+@keyframes g-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .g-wait .spinner { animation-duration: 3s; } }
+.g-spin-card { background: var(--surface); border-radius: var(--r-lg); overflow: hidden; }
+.g-spin { position: relative; aspect-ratio: 4 / 3; background: var(--stage-2); cursor: grab; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.g-spin:active { cursor: grabbing; }
+.g-spin img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
+.g-spin img.on { opacity: 1; }
+.g-hint { position: absolute; left: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: rgba(20, 33, 61, 0.72); color: #FFFFFF; font-size: 0.78rem; font-weight: 600; }
+.g-range { display: block; padding: 12px 16px 0; }
+.g-range input { width: 100%; accent-color: var(--ink); }
+.g-spin-card .fine { padding: 4px 16px 14px; margin: 0; }
+.g-row { display: flex; flex-direction: column; gap: 8px; }
+.g-row h3 { font-size: 0.95rem; }
+.g-strip { display: flex; gap: 8px; overflow-x: auto; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter) 4px; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.g-thumb { flex: none; width: 70%; max-width: 300px; aspect-ratio: 4 / 3; padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; background: var(--stage-2); scroll-snap-align: start; cursor: zoom-in; }
+.g-thumb img, .g-big img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.g-sbs { display: flex; flex-direction: column; gap: 10px; }
+.g-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.g-side { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.g-big { padding: 0; border: 0; border-radius: var(--r-md); overflow: hidden; aspect-ratio: 4 / 3; background: var(--stage-2); cursor: zoom-in; }
+.g-none { aspect-ratio: 4 / 3; border-radius: var(--r-md); border: 1px dashed var(--hair-strong); display: grid; place-items: center; text-align: center; padding: 10px; font-size: 0.78rem; color: var(--ink-soft); }
+.g-side figcaption { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 600; }
+.g-more { border: 1px solid var(--hair-strong); background: var(--surface); color: var(--ink); border-radius: 999px; font: 500 0.72rem var(--wide); padding: 4px 9px; cursor: pointer; min-height: 30px; }
+.g-sbs .fine { margin: 0; }
+.g-zoom { border: 0; padding: 0; background: transparent; max-width: min(96vw, 1100px); max-height: 92vh; }
+.g-zoom::backdrop { background: rgba(8, 12, 20, 0.88); }
+.g-zoom img { display: block; max-width: 100%; max-height: 92vh; border-radius: var(--r-md); }
+.g-zoom .icon-btn { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, 0.92); color: #14213D; border-radius: 50%; }

@@ -70,3 +70,12 @@ export async function nhtsa(path) {
   if (path.startsWith('/recalls')) return { Count: 2, results: [{ Component: 'AIR BAGS:FRONTAL' }, { Component: 'ELECTRICAL SYSTEM' }] };
   return {};
 }
+
+// A demo gallery: placeholder frames with tags, so the walkaround and side-by-side views render offline.
+export async function gallery({ year, make = 'Demo', model = 'Car', trim = '' }) {
+  const hue = [...`${make}${model}`].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 0);
+  const frame = (label, angle) => `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="640" height="420"><rect width="640" height="420" fill="hsl(${hue},25%,${angle == null ? 30 : 88}%)"/><text x="320" y="200" font-family="Arial" font-size="34" text-anchor="middle" fill="${angle == null ? '#fff' : '#333'}">${make} ${model}</text><text x="320" y="250" font-family="Arial" font-size="26" text-anchor="middle" fill="${angle == null ? '#ddd' : '#555'}">${label}</text></svg>`)}`;
+  const ext = [0, 45, 90, 135, 180, 225, 270, 315].map((a) => ({ url: frame(`outside ${a}°`, a), cat: 'exterior', angle: a, ok: true }));
+  const inside = ['dash', 'screen', 'front-seats', 'rear-seats', 'roof', 'cargo', 'console'].map((c) => ({ url: frame(c.replace('-', ' '), null), cat: c, angle: null, ok: true }));
+  return { listing: { year, make, model, trim, color: 'Oxford White', interior: 'Ebony', price: 38995, miles: 12, dealer: 'Demo Motors', city: 'Sarasota', state: 'FL', url: 'https://example.com', source: 'demo' }, photos: [...ext, ...inside], sorted: true, errors: [] };
+}

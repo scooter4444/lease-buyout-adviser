@@ -4,6 +4,7 @@
 // can fall back to manual entry instead of breaking.
 import { getCached, setCached, countCall } from './cache.js';
 import * as mock from './mock.js';
+import { classifyCarPhotos } from './ask.js';
 
 const MC_BASE = 'https://api.marketcheck.com';
 const AD_BASE = 'https://api.auto.dev';
@@ -375,7 +376,7 @@ export async function dealSweep({ zip, radius = 15, pages = 8 }) {
       zip, radius: Math.min(50, Number(radius) || 15), offer_type: 'lease', monthly_range: '100-1500',
       sort_by: 'monthly', sort_order: 'asc', rows: 10, start: p * 10,
     }, DAY));
-    if (!r.ok) { errors.push(r.error); break; }
+    if (!r.ok) { errors.push(r.error); if (r.error.status === 400) continue; break; }
     found = r.data?.num_found ?? found;
     const page = (r.data?.listings || []).map(mapOffer);
     for (const o of page) { const k = o.sha || o.id; if (!seen.has(k) && o.monthly) { seen.add(k); offers.push(o); } }
@@ -526,4 +527,56 @@ export async function nhtsaSafety({ year, make, model }) {
     recalls = { count: rs.length, topics: [...new Set(rs.map((x) => cap(String(x.Component || '').split(':')[0])))].filter(Boolean).slice(0, 8) };
   } else errors.push(rc.error);
   return { year: Number(year), make, model, ratings, recalls, errors };
+}
+
+// ---------- Gallery: a real car for sale, its photos sorted into a walkaround and interior shots ----------
+const WHITE = /white|blanc|pearl|frost|platinum|snow|glacier|ice|chalk|ivory|alpine/i;
+export async function gallery({ year, make, model, trim, zip, used, color = 'white' }) {
+  if (!make || !model) throw new ProviderError('app', 400, 'make and model are required');
+  const isUsed = used === '1' || used === 'true' || used === true;
+  const ck = `gallery:v1:${[year, make, model, trim, isUsed ? 'u' : 'n', String(zip || '').slice(0, 3), color].join('|').toLowerCase()}`;
+  const hit = getCached(ck);
+  if (hit !== undefined) return hit;
+  if (MOCK) return mock.gallery({ year, make, model, trim });
+  const errors = [];
+  const base = { car_type: isUsed ? 'used' : 'new', year, make, model, zip, radius: 250, rows: 25 };
+  let L = [];
+  // White first (the family cares), then any color; trim if it narrows to something.
+  for (const extra of [{ trim, base_exterior_color: color }, { base_exterior_color: color }, { trim }, {}]) {
+    if (extra.trim === undefined && 'trim' in extra) continue;
+    const r = await attempt(() => mc('/v2/search/car/active', { ...base, ...extra }, 3 * DAY));
+    if (!r.ok) { errors.push(r.error); break; }
+    L = (r.data?.listings || []).filter((l) => (l.media?.photo_links || []).length >= 8);
+    if (L.length) break;
+  }
+  let pick = null;
+  if (L.length) {
+    const score = (l) => (l.media.photo_links.length >= 15 ? 15 : l.media.photo_links.length) + (WHITE.test(`${l.exterior_color || ''} ${l.base_exterior_color || ''}`) ? 30 : 0) + (trim && new RegExp(String(trim).split(/\s+/)[0], 'i').test(l.build?.trim || '') ? 8 : 0);
+    const l = L.sort((a, b) => score(b) - score(a))[0];
+    pick = {
+      listing: { year: l.build?.year, make: l.build?.make, model: l.build?.model, trim: l.build?.trim, color: l.exterior_color || l.base_exterior_color || null, interior: l.interior_color || null, price: l.price || null, miles: l.miles || null, dealer: l.dealer?.name || null, city: l.dealer?.city || null, state: l.dealer?.state || null, url: l.vdp_url || null, source: 'MarketCheck' },
+      urls: [...new Set(l.media.photo_links)].slice(0, 30),
+    };
+  } else {
+    // auto.dev fallback: a listing near the ZIP, then all its photos.
+    const a = await attempt(() => ad('/listings', { 'vehicle.make': make, 'vehicle.model': model, 'vehicle.year': year || undefined, zip: zip || undefined, distance: zip ? 250 : undefined, limit: 20 }, 3 * DAY));
+    const rows = a.ok ? (a.data?.data || []).filter((x) => (isUsed ? x.retailListing?.used : !x.retailListing?.used)) : [];
+    if (!a.ok) errors.push(a.error);
+    rows.sort((x, y) => (WHITE.test(y.vehicle?.exteriorColor || '') ? 1 : 0) - (WHITE.test(x.vehicle?.exteriorColor || '') ? 1 : 0));
+    for (const x of rows.slice(0, 3)) {
+      const p = await attempt(() => ad(`/photos/${x.vin}`, null, 7 * DAY));
+      const urls = p.ok ? (p.data?.data?.retail || p.data?.retail || []) : [];
+      if (urls.length >= 8) {
+        pick = { listing: { year: x.vehicle?.year, make: x.vehicle?.make, model: x.vehicle?.model, trim: x.vehicle?.trim, color: x.vehicle?.exteriorColor || null, interior: x.vehicle?.interiorColor || null, price: x.retailListing?.price || null, miles: x.retailListing?.miles || null, dealer: x.retailListing?.dealer || null, city: x.retailListing?.city || null, state: x.retailListing?.state || null, url: x.retailListing?.vdp || null, source: 'auto.dev' }, urls: [...new Set(urls)].slice(0, 30) };
+        break;
+      }
+    }
+  }
+  if (!pick) return { listing: null, photos: [], sorted: false, errors };
+  const tags = await classifyCarPhotos(pick.urls).catch(() => null);
+  const photos = pick.urls.map((url, i) => ({ url, ...(tags?.get(i) || { cat: null, angle: null, ok: true }) }));
+  const out = { listing: pick.listing, photos, sorted: !!tags, errors };
+  // Sorted results keep for two weeks; unsorted ones retry sooner.
+  setCached(ck, out, tags ? 14 * DAY : 6 * 3600);
+  return out;
 }

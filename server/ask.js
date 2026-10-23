@@ -138,3 +138,56 @@ export async function readImage({ kind, dataUrl }) {
   const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
   try { return JSON.parse(text.replace(/^```json\s*|```$/g, '')); } catch { throw Object.assign(new Error('Couldn’t read that photo. Try a sharper, closer shot.'), { status: 422 }); }
 }
+
+// ---------- Sorting a dealer listing's photos (for the walkaround and side-by-side views) ----------
+// Only image bytes go to Gemini: no VIN, no listing details. Results are cached by the caller.
+const PHOTO_PROMPT = (n) => `These ${n} images are one car's photos from a dealer listing, numbered 0 to ${n - 1} in the order given.
+For each image return {"i": number, "cat": string, "angle": number|null, "ok": boolean}.
+cat is one of: "exterior", "dash" (wide view of the dashboard and steering wheel), "screen" (close-up of the center touchscreen or digital gauges), "front-seats", "rear-seats", "third-row", "roof" (sunroof or panoramic roof, from inside or above), "cargo", "console", "wheel", "engine", "other".
+angle is only for exterior: the direction the camera sees the car from, in degrees: 0 straight at the front, 45 front-left (driver side) corner, 90 left side, 135 rear-left, 180 rear, 225 rear-right, 270 right side, 315 front-right. Use null for interior shots.
+ok is false when the image is mostly a window sticker, document, dealer sign or banner, or the car is badly cropped or hidden.
+Return JSON only: {"photos": [...]} with one entry per image.`;
+
+let photoDay = { day: '', count: 0 };
+export async function classifyCarPhotos(urls) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || !urls.length) return null;
+  if (photoDay.day !== today()) photoDay = { day: today(), count: 0 };
+  if (photoDay.count >= (Number(process.env.PHOTO_SORTS_PER_DAY) || 60)) return null;
+  photoDay.count += 1;
+  const imgs = (await Promise.all(urls.map(async (u) => {
+    try {
+      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (LeaseBuyoutAdvisor)' }, signal: AbortSignal.timeout(12000) });
+      const type = (r.headers.get('content-type') || '').split(';')[0];
+      if (!r.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return null;
+      const buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > 1.8e6) return null;
+      return { mime_type: type, data: buf.toString('base64') };
+    } catch { return null; }
+  })));
+  const keep = imgs.map((d, i) => (d ? { d, i } : null)).filter(Boolean);
+  if (!keep.length) return null;
+  const model = await pickModel(key);
+  const r = await fetch(`${BASE}/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [...keep.map((k) => ({ inline_data: k.d })), { text: PHOTO_PROMPT(keep.length) }] }],
+      generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 4000 },
+    }),
+    signal: AbortSignal.timeout(90000),
+  }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: { message: e.message } }) }));
+  const j = await r.json().catch(() => ({}));
+  console.log(`[gemini] sort-photos ${r.status} model=${model} n=${keep.length}`);
+  if (!r.ok) return null;
+  const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+  let out;
+  try { out = JSON.parse(text.replace(/^```json\s*|```$/g, '')); } catch { return null; }
+  // Map Gemini's numbering (images that downloaded) back to the original list.
+  const tags = new Map();
+  for (const p of out.photos || []) {
+    const k = keep[Number(p.i)];
+    if (k) tags.set(k.i, { cat: String(p.cat || 'other'), angle: Number.isFinite(p.angle) ? ((Math.round(p.angle) % 360) + 360) % 360 : null, ok: p.ok !== false });
+  }
+  return tags;
+}

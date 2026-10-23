@@ -1834,7 +1834,7 @@ function renderSafetyTab() {
   renderSafety(el, {
     current: state.current, candidates: state.candidates.filter((c) => c.make && c.model),
     prefs: state.safetyPrefs, save: () => persist(), rerender: () => { if (document.body.dataset.tab === 'safety') renderSafetyTab(); },
-    api, esc, logoHTML,
+    api, esc, logoHTML, zip: state.assumptions.zip,
     photoHTML: (car, mine) => {
       const ph = mine ? (state.photo?.url ? state.photo : null) : (photoOf(car) ? { url: photoOf(car), custom: !!car.photo?.cutout } : null);
       return imgHTML(ph?.url, [car.year, car.make, car.model].filter(Boolean).join(' '), phCls(ph, 'contain'));

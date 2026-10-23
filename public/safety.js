@@ -6,7 +6,89 @@ let DATA = null;
 let loading = null;
 const live = new Map(); // "year|make|model" -> NHTSA result, or 'pending' / 'failed'
 
-const ui = { view: 'overview', sort: 'iihs', h2h: 0, tests: null, rev: 0 };
+const ui = { view: 'overview', sort: 'iihs', h2h: 0, tests: null, rev: 0, spin: null, frame: 0, cat: 'dash', sbs: { a: 0, b: 0 } };
+
+// ---------- Photos: a real car for sale, sorted into a walkaround and interior shots ----------
+const galleries = new Map(); // key -> result | 'pending' | 'failed'
+const CATS = [['exterior', 'Outside'], ['dash', 'Dash'], ['screen', 'Screens'], ['front-seats', 'Front seats'], ['rear-seats', 'Rear seats'], ['roof', 'Sunroof'], ['cargo', 'Cargo'], ['console', 'Console'], ['third-row', 'Third row']];
+const catName = (k) => (CATS.find((c) => c[0] === k) || [k, k])[1];
+function galleryFor(x, ctx) {
+  const c = x.car, rec = x.rec;
+  const used = x.mine || (c.condition && c.condition !== 'new');
+  const trim = c.trim || (rec.researched ? rec.trim : '');
+  const year = c.year || rec.year || '';
+  const key = [year, c.make, c.model, trim, used ? 'u' : 'n'].join('|');
+  const got = galleries.get(key);
+  if (!got) {
+    galleries.set(key, 'pending');
+    ctx.api(`api/gallery?${new URLSearchParams({ year, make: c.make, model: c.model, trim, used: used ? '1' : '', zip: ctx.zip || '' })}`)
+      .then((r) => { galleries.set(key, r); ctx.rerender(); })
+      .catch(() => { galleries.set(key, 'failed'); ctx.rerender(); });
+    return { state: 'pending' };
+  }
+  if (got === 'pending' || got === 'failed') return { state: got };
+  const good = got.photos.filter((p) => p.ok !== false);
+  // Without sorting, dealers usually lead with outside shots: use the first eight as the walkaround.
+  const ext = got.sorted ? good.filter((p) => p.cat === 'exterior' && p.angle != null).sort((a, b) => a.angle - b.angle) : good.slice(0, 8);
+  const byCat = {};
+  for (const p of good) if (got.sorted && p.cat && p.cat !== 'exterior') (byCat[p.cat] ||= []).push(p);
+  if (got.sorted) byCat.exterior = ext;
+  return { state: got.listing ? 'ready' : 'none', g: got, ext, byCat, all: good };
+}
+function sourceLine(G, esc) {
+  const l = G.g.listing;
+  const what = [l.color ? l.color.replace(/\s*(metallic|tri-?coat|pearl(coat)?|clearcoat|tinted)\b/gi, '').trim() : '', l.year, l.make, l.model, l.trim].filter(Boolean).join(' ');
+  const where = [l.dealer, [l.city, l.state].filter(Boolean).join(', ')].filter(Boolean).join(', ');
+  return `Photos of ${/^[aeiou]/i.test(what) ? 'an' : 'a'} ${esc(what)}${l.miles > 100 ? ` with ${Number(l.miles).toLocaleString()} miles` : ''} for sale${where ? ` at ${esc(where)}` : ''}.${l.url ? ` <a href="${esc(l.url)}" target="_blank" rel="noopener">See the listing</a>` : ''}`;
+}
+const pendingHTML = (msg) => `<div class="g-wait"><span class="spinner" aria-hidden="true"></span>${msg}</div>`;
+
+function spinView(list, ctx) {
+  const { esc } = ctx;
+  const id = ui.spin && list.some((x) => x.rec.id === ui.spin) ? ui.spin : list[0].rec.id;
+  const x = list.find((y) => y.rec.id === id);
+  const G = galleryFor(x, ctx);
+  const chips = `<div class="s-chips scroll" role="group" aria-label="Car">${list.map((y) => `<button type="button" class="s-chip" data-s="spin" data-k="${esc(y.rec.id)}" aria-pressed="${y.rec.id === id}">${esc(y.mine ? `Her ${y.rec.model}` : `${y.rec.make} ${y.rec.model}`)}</button>`).join('')}</div>`;
+  if (G.state === 'pending') return `${chips}${pendingHTML('Finding a white one for sale nearby and sorting its photos. This can take half a minute the first time.')}`;
+  if (G.state !== 'ready') return `${chips}<p class="s-empty">No listing with enough photos turned up for this car.</p>`;
+  const n = G.ext.length;
+  const f = Math.min(ui.frame, Math.max(0, n - 1));
+  const insideCats = CATS.filter(([k]) => k !== 'exterior' && G.byCat[k]?.length);
+  return `${chips}
+    <section class="g-spin-card">
+      <div class="g-spin" data-spin="${n}" aria-label="Drag to walk around the car">
+        ${G.ext.map((p, i) => `<img src="${esc(p.url)}" alt="${esc(`${x.rec.make} ${x.rec.model}${p.angle != null ? `, from ${p.angle}°` : ''}`)}" class="${i === f ? 'on' : ''}" draggable="false" loading="${i < 3 ? 'eager' : 'lazy'}" referrerpolicy="no-referrer">`).join('')}
+        <span class="g-hint" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 4 0 0 0 18 0"></path><path d="M17 15l4-3-4-3"></path></svg>Drag to turn</span>
+      </div>
+      <label class="g-range"><span class="sr-only">Turn the car</span><input type="range" min="0" max="${Math.max(0, n - 1)}" value="${f}" data-range></label>
+      <p class="fine">${sourceLine(G, esc)}${G.g.sorted ? '' : ' Photos aren’t sorted yet, so the turn may jump.'}</p>
+    </section>
+    ${insideCats.length ? insideCats.map(([k, label]) => `
+      <section class="g-row"><h3>${esc(label)}</h3>
+        <div class="g-strip">${G.byCat[k].map((p) => `<button type="button" class="g-thumb" data-s="zoom" data-k="${esc(p.url)}" aria-label="${esc(`${label}, larger`)}"><img src="${esc(p.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div>
+      </section>`).join('') : `<section class="g-row"><h3>All photos</h3><div class="g-strip">${G.all.map((p) => `<button type="button" class="g-thumb" data-s="zoom" data-k="${esc(p.url)}" aria-label="Photo, larger"><img src="${esc(p.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div></section>`}`;
+}
+
+function sideBySide(A, B, ctx) {
+  const { esc } = ctx;
+  const GA = galleryFor(A, ctx), GB = galleryFor(B, ctx);
+  if (GA.state === 'pending' || GB.state === 'pending') return `<section class="g-sbs">${pendingHTML('Loading photos of both cars…')}</section>`;
+  const cats = CATS.filter(([k]) => GA.byCat?.[k]?.length || GB.byCat?.[k]?.length);
+  if (!cats.length) return '';
+  const cat = cats.some(([k]) => k === ui.cat) ? ui.cat : cats[0][0];
+  const side = (G, x, which) => {
+    const ps = G.byCat?.[cat] || [];
+    if (!ps.length) return `<figure class="g-side"><div class="g-none">No ${esc(catName(cat).toLowerCase())} photo in this listing</div><figcaption>${esc(x.mine ? `Her ${x.rec.model}` : x.rec.model)}</figcaption></figure>`;
+    const i = ui.sbs[which] % ps.length;
+    return `<figure class="g-side"><button type="button" class="g-big" data-s="zoom" data-k="${esc(ps[i].url)}" aria-label="Larger"><img src="${esc(ps[i].url)}" alt="${esc(`${x.rec.model} ${catName(cat).toLowerCase()}`)}" referrerpolicy="no-referrer"></button>
+      <figcaption>${esc(x.mine ? `Her ${x.rec.model}` : x.rec.model)}${ps.length > 1 ? ` <button type="button" class="g-more" data-s="sbs" data-k="${which}">${i + 1} of ${ps.length}</button>` : ''}</figcaption></figure>`;
+  };
+  return `<section class="g-sbs" aria-label="Side by side photos">
+    <div class="s-chips scroll" role="group" aria-label="What to compare">${cats.map(([k, l]) => `<button type="button" class="s-chip" data-s="cat" data-k="${k}" aria-pressed="${k === cat}">${esc(l)}</button>`).join('')}</div>
+    <div class="g-pair">${side(GA, A, 'a')}${side(GB, B, 'b')}</div>
+    <p class="fine">Real cars for sale; trims and colors can differ from the deal.</p>
+  </section>`;
+}
 
 const FEATS = [
   { k: 'handsFree', label: 'Hands-free highway driving' },
@@ -239,6 +321,7 @@ function headToHead(list, ctx) {
       <button type="button" class="icon-btn" data-s="h2hstep" data-k="1" aria-label="Next car"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg></button>
       <p class="s-pos">${i + 1} of ${n} · swipe to change</p>
     </section>
+    ${sideBySide(mine, o, ctx)}
     <section class="s-gl">
       <div><h3>What she’d gain</h3>${li(gains, '+')}</div>
       <div class="lose"><h3>What she’d give up</h3>${li(losses, '−')}</div>
@@ -353,11 +436,12 @@ export function renderSafety(el, ctx) {
   add(ctx.current, true);
   for (const c of ctx.candidates) add(c, false);
   if (!list.length) { el.innerHTML = '<p class="s-empty">Add your car on the Your car tab to see safety ratings.</p>'; return; }
-  const views = [['overview', 'Overview'], ['h2h', 'Head to head'], ['tests', 'Crash tests'], ['reviews', 'Reviews']];
-  const body = ui.view === 'h2h' ? headToHead(list, ctx) : ui.view === 'tests' ? crashTests(list, ctx) : ui.view === 'reviews' ? reviews(list, ctx) : overview(list, ctx);
+  const views = [['overview', 'Overview'], ['spin', '360°'], ['h2h', 'Head to head'], ['tests', 'Crash tests'], ['reviews', 'Reviews']];
+  const body = ui.view === 'h2h' ? headToHead(list, ctx) : ui.view === 'spin' ? spinView(list, ctx) : ui.view === 'tests' ? crashTests(list, ctx) : ui.view === 'reviews' ? reviews(list, ctx) : overview(list, ctx);
   el.innerHTML = `
     <nav class="seg-ctl s-views" aria-label="Safety views">${views.map(([k, l]) => `<button type="button" data-s="view" data-k="${k}" aria-pressed="${ui.view === k}">${l}</button>`).join('')}</nav>
-    <div class="s-body">${body}</div>`;
+    <div class="s-body">${body}</div>
+    <dialog class="g-zoom" id="gZoom"><img alt=""><button type="button" class="icon-btn" data-close aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></dialog>`;
   wire(el, ctx, list);
 }
 
@@ -374,6 +458,10 @@ function wire(el, ctx, list) {
     else if (s === 'h2h') { ui.h2h = Math.max(0, others().findIndex((x) => x.rec.id === k)); ui.view = 'h2h'; }
     else if (s === 'h2hstep') ui.h2h += Number(k);
     else if (s === 'revstep') ui.rev += Number(k);
+    else if (s === 'spin') { if (ui.spin !== k) ui.frame = 0; ui.spin = k; ui.view = 'spin'; }
+    else if (s === 'cat') { ui.cat = k; ui.sbs = { a: 0, b: 0 }; }
+    else if (s === 'sbs') ui.sbs[k] += 1;
+    else if (s === 'zoom') { const d = el.querySelector('#gZoom'); d.querySelector('img').src = k; d.showModal(); return; }
     else if (s === 'shortlist') { const sl = new Set(c.prefs.shortlist || []); sl.has(k) ? sl.delete(k) : sl.add(k); c.prefs.shortlist = [...sl]; c.save(); }
     c.rerender();
     if (['view', 'tests', 'h2h'].includes(s)) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -384,8 +472,29 @@ function wire(el, ctx, list) {
   });
   // Swipe left/right on the head-to-head pair and the review card.
   let start = null;
-  el.addEventListener('pointerdown', (e) => { const t = e.target.closest('[data-swipe]'); if (t) start = { x: e.clientX, y: e.clientY, s: t.dataset.swipe }; });
+  el.addEventListener('pointerdown', (e) => {
+    const sp = e.target.closest('[data-spin]');
+    if (sp) { e.preventDefault(); spin = { x: e.clientX, f: ui.frame, n: Number(sp.dataset.spin), el: sp }; sp.setPointerCapture?.(e.pointerId); return; }
+    const t = e.target.closest('[data-swipe]'); if (t) start = { x: e.clientX, y: e.clientY, s: t.dataset.swipe };
+  });
+  // The walkaround: dragging scrubs frames without re-rendering, so it stays smooth.
+  let spin = null;
+  const show = (root, f) => {
+    const imgs = root.querySelectorAll('.g-spin img');
+    imgs.forEach((im, i) => im.classList.toggle('on', i === f));
+    const r = root.querySelector('[data-range]'); if (r) r.value = f;
+    ui.frame = f;
+  };
+  el.addEventListener('pointermove', (e) => {
+    if (!spin || !spin.n) return;
+    const f = (((spin.f - Math.round((e.clientX - spin.x) / 36)) % spin.n) + spin.n) % spin.n;
+    if (f !== ui.frame) show(el, f);
+  });
+  el.addEventListener('pointercancel', () => { spin = null; });
+  el.addEventListener('input', (e) => { if (e.target.matches('[data-range]')) show(el, Number(e.target.value)); });
+  el.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) e.target.closest('dialog')?.close(); if (e.target.matches('dialog.g-zoom')) e.target.close(); });
   el.addEventListener('pointerup', (e) => {
+    if (spin) { spin = null; return; }
     if (!start) return;
     const dx = e.clientX - start.x, dy = e.clientY - start.y;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) act(start.s, dx < 0 ? 1 : -1);

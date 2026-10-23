@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  lookupVehicle, newCarMarket, incentives, dealSweep, autodevTco, autodevApr, plateToVin, photoFor, nhtsaSafety, cutoutsConfigured, configured, ProviderError,
+  lookupVehicle, newCarMarket, incentives, dealSweep, autodevTco, autodevApr, plateToVin, photoFor, nhtsaSafety, gallery, cutoutsConfigured, configured, ProviderError,
 } from './providers.js';
 import { usageThisMonth, cacheDir } from './cache.js';
 import { ask, askConfigured, readImage } from './ask.js';
@@ -60,6 +60,7 @@ app.get('/api/new-market', wrap((req) => newCarMarket(req.query)));
 app.get('/api/incentives', wrap((req) => incentives(req.query)));
 app.get('/api/deals', wrap((req) => dealSweep(req.query)));
 app.get('/api/safety', wrap((req) => nhtsaSafety(req.query)));
+app.get('/api/gallery', wrap((req) => gallery(req.query)));
 app.get('/api/photo', wrap((req) => photoFor(req.query)));
 app.post('/api/read-image', async (req, res) => {
   try { res.json(await readImage(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
