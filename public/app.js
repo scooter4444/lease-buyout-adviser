@@ -1,6 +1,6 @@
 import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
 import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
-import { logoUrl } from './logos.js';
+import { logoUrl, logoIsMono } from './logos.js';
 
 // ---------- State ----------
 const STORAGE_KEY = 'lba:v2';
@@ -104,10 +104,10 @@ const money = (x, d = 0) => (x == null || !Number.isFinite(x) ? '—' : `${x < 0
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtInput = (v) => (v === '' || v == null ? '' : String(v));
 
-// Brand badge: the maker's logo on a small white tile (some logo files have white backgrounds).
+// Brand badge: the maker's logo, transparent, sized to a common box so rows line up.
 function logoHTML(make, cls = '') {
   const u = logoUrl(make);
-  return u ? `<span class="logo ${cls}"><img src="${u}" alt="${esc(make)}" loading="lazy" decoding="async" onerror="this.parentNode.remove()"></span>` : '';
+  return u ? `<span class="logo ${logoIsMono(make) ? 'mono' : ''} ${cls}"><img src="${u}" alt="${esc(make)}" loading="lazy" decoding="async" onerror="this.parentNode.remove()"></span>` : '';
 }
 
 async function api(url) {
