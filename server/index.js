@@ -4,14 +4,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  lookupVehicle, newCarMarket, incentives, autodevTco, autodevApr, plateToVin, configured, ProviderError,
+  lookupVehicle, newCarMarket, incentives, autodevTco, autodevApr, plateToVin, photoFor, configured, ProviderError,
 } from './providers.js';
 import { usageThisMonth, cacheDir } from './cache.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // Optional password gate (HTTP Basic). Keeps strangers from spending your API quota.
 const PASSWORD = process.env.APP_PASSWORD;
@@ -52,11 +52,22 @@ app.get('/api/vehicle/:vin', wrap((req) => lookupVehicle({ vin: req.params.vin, 
 app.get('/api/plate', wrap((req) => plateToVin({ state: req.query.state, plate: req.query.plate })));
 app.get('/api/new-market', wrap((req) => newCarMarket(req.query)));
 app.get('/api/incentives', wrap((req) => incentives(req.query)));
+app.get('/api/photo', wrap((req) => photoFor(req.query)));
 app.get('/api/autodev/tco/:vin', wrap((req) => autodevTco({ vin: req.params.vin, zip: req.query.zip })));
 app.get('/api/autodev/apr/:vin', wrap((req) => autodevApr({ vin: req.params.vin, ...req.query })));
 
 // One saved profile (your car + comparisons) so phone and laptop see the same numbers.
+// Saved cars live here (shape: { active, profiles: { id: {...} } }).
+// SEED_PROFILE (a Railway variable, never committed) pre-loads cars on first run.
 const PROFILE = path.join(cacheDir, 'profile.json');
+if (!fs.existsSync(PROFILE) && process.env.SEED_PROFILE) {
+  try {
+    fs.writeFileSync(PROFILE, JSON.stringify(JSON.parse(process.env.SEED_PROFILE)));
+    console.log('Seeded saved cars from SEED_PROFILE');
+  } catch (e) {
+    console.warn('SEED_PROFILE is not valid JSON:', e.message);
+  }
+}
 app.get('/api/profile', (_req, res) => {
   try { res.json(JSON.parse(fs.readFileSync(PROFILE, 'utf8'))); } catch { res.json(null); }
 });

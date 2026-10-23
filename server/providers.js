@@ -237,6 +237,7 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100 
     const mpg = median(L.map((l) => l.mpg));
     return {
       source: 'MarketCheck',
+      photo: L.find((l) => l.photo)?.photo || null,
       count: r.data?.num_found ?? L.length,
       medianPrice: priceMed ? Math.round(priceMed) : null,
       medianMsrp: msrpMed ? Math.round(msrpMed) : null,
@@ -255,6 +256,7 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100 
     const prices = rows.map((l) => l.retailListing?.price).filter((p) => p > 0);
     return {
       source: 'auto.dev',
+      photo: rows.find((l) => l.retailListing?.primaryImage)?.retailListing.primaryImage || null,
       count: rows.length,
       medianPrice: median(prices) ? Math.round(median(prices)) : null,
       medianMsrp: null,
@@ -269,7 +271,7 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100 
     };
   }
   errors.push(a.error);
-  return { source: null, count: 0, medianPrice: null, listings: [], errors };
+  return { source: null, photo: null, count: 0, medianPrice: null, listings: [], errors };
 }
 
 export async function incentives({ make, model, year, zip }) {
@@ -290,6 +292,7 @@ export async function incentives({ make, model, year, zip }) {
       term,
       dueAtSigning: o.due_at_signing ?? null,
       cashback: o.cashback_amount ?? null,
+      group: o.cashback_target_group || null,
       msrp: o.msrp ?? null,
       residual: o.lease_end_purchase_price ?? null,
       mileageLimit: o.mileage_limit ?? null,
@@ -320,4 +323,22 @@ export async function plateToVin({ state, plate }) {
   if (!r.ok) return { vin: null, errors: [r.error] };
   const d = r.data?.data || r.data;
   return { vin: d?.vin || d?.VIN || null, errors: [] };
+}
+
+// ---------- Photos ----------
+// A photo of this exact VIN if one exists (auto.dev, free tier), otherwise a local
+// listing photo of the same year/make/model. Returns { url, exact }.
+export async function photoFor({ vin, year, make, model, zip }) {
+  if (MOCK) return mock.photo({ make, model });
+  if (vin && /^[A-HJ-NPR-Z0-9]{17}$/i.test(vin)) {
+    const r = await attempt(() => ad(`/photos/${String(vin).toUpperCase()}`, null, 30 * DAY));
+    const url = r.ok && (r.data?.data?.retail?.[0] || r.data?.retail?.[0]);
+    if (url) return { url, exact: true };
+  }
+  if (make && model) {
+    const r = await attempt(() => ad('/listings', { 'vehicle.make': make, 'vehicle.model': model, 'vehicle.year': year || undefined, zip: zip || undefined, distance: zip ? 200 : undefined, limit: 10 }, 30 * DAY));
+    const hit = r.ok && (r.data?.data || []).find((l) => l.retailListing?.primaryImage);
+    if (hit) return { url: hit.retailListing.primaryImage, exact: false };
+  }
+  return { url: null, exact: false };
 }

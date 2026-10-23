@@ -12,76 +12,112 @@
   <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..800;1,100,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-tab="verdict">
   <header class="top">
     <div class="brand">
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6"/><path d="M7 20l3-7h12l3 7v4H7z"/><circle cx="11" cy="24" r="2"/><circle cx="21" cy="24" r="2"/></svg>
       <span>Lease Buyout Advisor</span>
     </div>
+    <label class="switcher">
+      <span class="sr">Saved car</span>
+      <select id="profileSelect" aria-label="Saved car"></select>
+    </label>
     <div class="usage" id="usage" aria-live="polite"></div>
   </header>
 
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" data-tab="verdict" class="narrow-only">Verdict</button>
+    <button type="button" role="tab" data-tab="car">Your car</button>
+    <button type="button" role="tab" data-tab="models">Compare<span class="wide-only"> models</span></button>
+  </nav>
+
   <main class="layout">
     <section class="inputs" aria-label="Inputs">
-
       <form id="form" autocomplete="off" novalidate>
-        <fieldset class="block" id="car">
-          <legend><h2>Your leased car</h2></legend>
-          <div class="lookup">
-            <label class="field wide">
-              <span>VIN</span>
-              <input id="vin" data-path="current.vin" maxlength="17" spellcheck="false" autocapitalize="characters" placeholder="17 characters, on your registration or dash">
-            </label>
-            <button type="button" class="btn primary" id="lookupVin">Look up car</button>
-          </div>
-          <details class="plate">
-            <summary>No VIN handy? Use your license plate</summary>
+
+        <div class="pane" data-pane="car">
+          <fieldset class="block" id="car">
+            <legend><h2>Your leased car</h2></legend>
             <div class="lookup">
-              <label class="field"><span>State</span><select id="plateState" class="state-select"></select></label>
-              <label class="field"><span>Plate</span><input id="plate" autocapitalize="characters" spellcheck="false"></label>
-              <button type="button" class="btn" id="lookupPlate">Find VIN</button>
+              <label class="field wide">
+                <span>VIN</span>
+                <input id="vin" data-path="current.vin" maxlength="17" spellcheck="false" autocapitalize="characters" placeholder="17 characters, on your registration or dash">
+              </label>
+              <button type="button" class="btn primary" id="lookupVin">Look up car</button>
             </div>
-          </details>
-          <p class="status" id="carStatus" role="status"></p>
-          <div class="car-id" id="carId" hidden></div>
+            <details class="plate">
+              <summary>No VIN handy? Use your license plate</summary>
+              <div class="lookup">
+                <label class="field"><span>State</span><select id="plateState" class="state-select"></select></label>
+                <label class="field"><span>Plate</span><input id="plate" autocapitalize="characters" spellcheck="false"></label>
+                <button type="button" class="btn" id="lookupPlate">Find VIN</button>
+              </div>
+            </details>
+            <p class="status" id="carStatus" role="status"></p>
+            <div class="car-id" id="carId" hidden></div>
 
-          <h3>Lease terms</h3>
-          <div class="grid" data-fields="lease"></div>
+            <h3>Lease terms</h3>
+            <div class="grid" data-fields="lease"></div>
 
-          <h3>The car today</h3>
-          <div class="grid" data-fields="vehicle"></div>
-          <p class="hint" id="valueSource"></p>
+            <h3>The car today</h3>
+            <div class="grid" data-fields="vehicle"></div>
+            <p class="hint" id="valueSource"></p>
 
-          <h3>If you buy it out</h3>
-          <div class="grid" data-fields="buyoutPay"></div>
+            <h3>If you buy it out</h3>
+            <div class="grid" data-fields="buyoutPay"></div>
 
-          <h3>Running costs</h3>
-          <p class="hint">Leave any of these blank and the app uses a typical figure for this car.</p>
-          <div class="grid" data-fields="running"></div>
-        </fieldset>
+            <h3>Running costs</h3>
+            <p class="hint">Leave any of these blank and the app uses a typical figure for this car.</p>
+            <div class="grid" data-fields="running"></div>
+          </fieldset>
 
-        <fieldset class="block" id="compare">
-          <legend><h2>Compare against</h2></legend>
-          <p class="lede">Add the new cars you'd consider. Each gets priced as both a lease and a purchase, using local dealer prices and current manufacturer offers.</p>
-          <div id="candidates"></div>
-          <div class="add-row">
-            <button type="button" class="btn" id="addCandidate">Add a new car</button>
-            <button type="button" class="btn ghost" id="addSame">Add a new version of my car</button>
-          </div>
-        </fieldset>
+          <fieldset class="block" id="situation">
+            <legend><h2>Your situation</h2></legend>
+            <div class="grid" data-fields="situation"></div>
+            <details class="more">
+              <summary>Taxes, fees and fine print</summary>
+              <div class="grid" data-fields="fine"></div>
+            </details>
+          </fieldset>
+        </div>
 
-        <fieldset class="block" id="situation">
-          <legend><h2>Your situation</h2></legend>
-          <div class="grid" data-fields="situation"></div>
-          <details class="more">
-            <summary>Taxes, fees and fine print</summary>
-            <div class="grid" data-fields="fine"></div>
-          </details>
-        </fieldset>
+        <div class="pane" data-pane="models">
+          <fieldset class="block" id="models">
+            <legend><h2>Compare models</h2></legend>
+            <p class="lede" id="modelsLede">Every model is priced as a purchase and a lease with local dealer prices and current manufacturer offers, then ranked by what it really costs per month.</p>
+
+            <div class="tools">
+              <label class="field">
+                <span>Class of car</span>
+                <select id="segment"></select>
+              </label>
+              <button type="button" class="btn" id="suggest">Add comparable models</button>
+              <button type="button" class="btn primary" id="priceAll">Get prices &amp; offers for all</button>
+            </div>
+
+            <div class="plan" role="radiogroup" aria-labelledby="planLabel">
+              <span id="planLabel">Ford &amp; Lincoln pricing</span>
+              <div class="seg-ctl">
+                <label><input type="radio" name="plan" value="public"><span>Public</span></label>
+                <label><input type="radio" name="plan" value="A"><span>A-Plan</span></label>
+                <label><input type="radio" name="plan" value="Z"><span>Z-Plan</span></label>
+              </div>
+              <label class="pct" id="planPctWrap" hidden><span class="input has-suf"><input id="planPct" inputmode="decimal"><span class="suf">% off MSRP</span></span></label>
+            </div>
+            <p class="status" id="modelsStatus" role="status"></p>
+
+            <div id="modelCompare"></div>
+
+            <div class="add-row">
+              <button type="button" class="btn" id="addCandidate">Add a model yourself</button>
+              <button type="button" class="btn ghost" id="addSame">Add a new version of my car</button>
+            </div>
+          </fieldset>
+        </div>
       </form>
     </section>
 
-    <section class="results" id="results" aria-label="Results" aria-live="polite"></section>
+    <section class="results pane" data-pane="verdict" id="results" aria-label="Results" aria-live="polite"></section>
   </main>
 
   <footer class="foot">
