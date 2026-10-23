@@ -48,8 +48,14 @@
       const c = p.current;
       const end = c.leaseEndDate ? new Date(`${c.leaseEndDate}T12:00:00`) : null;
       const days = end ? Math.ceil((end - Date.now()) / 86400000) : null;
-      const photo = p.photo?.url ? `<figure><img class="ph win-ph${p.photo.custom ? ' contain' : ''}${p.photo.blend ? ' blend' : ''}" src="${esc(p.photo.url)}" alt="${esc(p.name)}" referrerpolicy="no-referrer"></figure>` : '';
       if (!best) throw new Error('This car doesn’t have enough numbers yet to compare.');
+      // Show the winning car: her own car for a buyout, otherwise the recommended model.
+      let ph = best.kind === 'buyout' ? p.photo : null;
+      if (best.kind !== 'buyout') {
+        const w = candidates.find((x) => x.id === best.candidateId);
+        if (w) ph = w.photo?.cutout ? w.photo : (w.market?.photo ? { url: w.market.photo } : w.photo);
+      }
+      const photo = ph?.url ? `<figure><img class="ph win-ph${ph.custom ? ' contain' : ''}${ph.blend ? ' blend' : ''}" src="${esc(ph.url)}" alt="${esc(best.vehicle)}" referrerpolicy="no-referrer"></figure>` : '';
       const second = r.scenarios[1];
       $('#share').innerHTML = `
         <div class="share-top">${logo}<span>${esc(p.name)}</span></div>
