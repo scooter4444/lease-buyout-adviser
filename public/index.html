@@ -19,10 +19,8 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6"/><path d="M7 20l3-7h12l3 7v4H7z"/><circle cx="11" cy="24" r="2"/><circle cx="21" cy="24" r="2"/></svg>
       <span>Lease Buyout Advisor</span>
     </div>
-    <label class="switcher">
-      <span class="sr">Saved car</span>
-      <select id="profileSelect" aria-label="Saved car"></select>
-    </label>
+    <button type="button" class="switcher" id="garageBtn" aria-haspopup="dialog"><span id="garageLabel">Your cars</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
     <div class="usage" id="usage" aria-live="polite"></div>
   </header>
 
@@ -92,7 +90,7 @@
                 <span>Class of car</span>
                 <select id="segment"></select>
               </label>
-              <button type="button" class="btn" id="suggest">Add comparable models</button>
+              <button type="button" class="btn" id="suggest">Add top suggestions</button>
               <button type="button" class="btn primary" id="priceAll">Get prices &amp; offers for all</button>
             </div>
 
@@ -107,6 +105,7 @@
             </div>
             <p class="status" id="modelsStatus" role="status"></p>
 
+            <div id="ideas"></div>
             <div id="modelCompare"></div>
 
             <div class="add-row">
@@ -120,6 +119,93 @@
 
     <section class="results pane" data-pane="verdict" id="results" aria-label="Results" aria-live="polite"></section>
   </main>
+
+  <button type="button" class="ask-fab" id="askBtn" aria-haspopup="dialog">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"></path><path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.3"></path><circle cx="12" cy="16.6" r=".6" fill="currentColor"></circle></svg>
+    <span>Ask</span>
+  </button>
+
+  <!-- Your cars -->
+  <dialog class="sheet" id="garage" aria-labelledby="garageTitle">
+    <div class="sheet-head"><h2 id="garageTitle">Your cars</h2><button type="button" class="icon-btn" data-close aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>
+    <p class="sheet-sub">Each leased car gets its own decision and its own deadline.</p>
+    <div id="garageList"></div>
+    <button type="button" class="btn primary block" id="startAdd">Add a car</button>
+  </dialog>
+
+  <!-- Add a car: three steps -->
+  <dialog class="sheet" id="addCar" aria-labelledby="addTitle">
+    <div class="sheet-head">
+      <button type="button" class="icon-btn" id="addBack" aria-label="Back"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>
+      <div class="sheet-title"><h2 id="addTitle">Add a car</h2><span id="addStepLabel">Step 1 of 3</span></div>
+      <button type="button" class="icon-btn" data-close aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button>
+    </div>
+    <div class="steps" aria-hidden="true"><i></i><i></i><i></i></div>
+
+    <section class="step" data-step="1">
+      <h3 class="step-h">Which car is it?</h3>
+      <p class="sheet-sub">The VIN gives the exact year, trim and options, so the value is for your car, not an average one.</p>
+      <label class="field"><span>Name this car</span><input id="newName" placeholder="e.g. My Expedition"></label>
+      <label class="field"><span>VIN</span><input id="newVin" class="vin" maxlength="17" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="17 characters"></label>
+      <p class="hint">On the driver’s side of the windshield, the door frame, your registration or insurance card, or the FordPass app.</p>
+      <details class="plate"><summary>No VIN handy? Use the license plate</summary>
+        <div class="lookup" style="grid-template-columns: 90px 1fr auto; margin-top: 8px">
+          <label class="field"><span>State</span><select id="newPlateState" class="state-select"></select></label>
+          <label class="field"><span>Plate</span><input id="newPlate" autocapitalize="characters" spellcheck="false"></label>
+          <button type="button" class="btn" id="newPlateGo">Find VIN</button>
+        </div>
+      </details>
+      <p class="status" id="step1Status" role="status"></p>
+      <button type="button" class="btn primary block" id="step1Go">Look up this car</button>
+    </section>
+
+    <section class="step" data-step="2" hidden>
+      <h3 class="step-h">Is this your car?</h3>
+      <div id="confirmCard"></div>
+      <div class="grid">
+        <label class="field"><span>Odometer today</span><span class="input has-suf"><input id="newMiles" inputmode="numeric" placeholder="e.g. 31,250"><span class="suf">mi</span></span></label>
+        <label class="field"><span>ZIP where you live</span><input id="newZip" inputmode="numeric" maxlength="5"></label>
+        <label class="field"><span>State</span><select id="newState" class="state-select"></select></label>
+      </div>
+      <p class="hint">Miles and ZIP set what it’s worth today.</p>
+      <p class="status" id="step2Status" role="status"></p>
+      <div class="two-btn"><button type="button" class="btn" id="notMine">Not my car</button><button type="button" class="btn primary" id="step2Go">Yes, that’s it</button></div>
+    </section>
+
+    <section class="step" data-step="3" hidden>
+      <h3 class="step-h">The lease numbers</h3>
+      <p class="sheet-sub">All on your payoff quote from the leasing company (online account, or call and ask for a lease-end payoff).</p>
+      <label class="field"><span>Buyout price</span><span class="input has-pre"><span class="pre">$</span><input id="newBuyout" inputmode="decimal" class="big" placeholder="from your payoff quote"></span></label>
+      <label class="field"><span>Decide by (lease end date)</span><input id="newEnd" type="date"></label>
+      <div class="grid">
+        <label class="field"><span>Total miles allowed</span><span class="input has-suf"><input id="newAllowed" inputmode="numeric" placeholder="e.g. 31,500"><span class="suf">mi</span></span></label>
+        <label class="field"><span>Monthly payment</span><span class="input has-pre"><span class="pre">$</span><input id="newPayment" inputmode="decimal"></span></label>
+      </div>
+      <div class="plan" role="radiogroup" aria-label="Price new Fords with">
+        <span>Price new Fords with</span>
+        <div class="seg-ctl">
+          <label><input type="radio" name="newPlan" value="public" checked><span>Public</span></label>
+          <label><input type="radio" name="newPlan" value="A"><span>A-Plan</span></label>
+          <label><input type="radio" name="newPlan" value="Z"><span>Z-Plan</span></label>
+        </div>
+      </div>
+      <p class="status" id="step3Status" role="status"></p>
+      <button type="button" class="btn primary block" id="step3Go">See my options</button>
+    </section>
+  </dialog>
+
+  <!-- Ask -->
+  <dialog class="sheet" id="askSheet" aria-labelledby="askTitle">
+    <div class="sheet-head"><h2 id="askTitle">Ask about <span id="askCar">this car</span></h2><button type="button" class="icon-btn" data-close aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>
+    <div id="askThread" aria-live="polite"></div>
+    <div class="ask-chips" id="askChips"></div>
+    <form id="askForm" class="ask-form">
+      <label class="sr" for="askInput">Your question</label>
+      <textarea id="askInput" rows="2" placeholder="Ask anything about this decision"></textarea>
+      <button type="submit" class="btn primary" id="askSend">Ask</button>
+    </form>
+    <p class="hint">Answers use your numbers in the app first, then the web, and say which is which. Powered by Google Gemini; don’t type anything private.</p>
+  </dialog>
 
   <footer class="foot">
     <p>Estimates, not offers. Market data from MarketCheck and auto.dev; depreciation, maintenance and insurance use typical curves you can override. Confirm the buyout quote, taxes and any offer with the lessor or dealer before signing.</p>

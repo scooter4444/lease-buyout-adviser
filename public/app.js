@@ -1,5 +1,5 @@
 import { analyze, STATE_TAX, NO_TRADE_TAX_CREDIT, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
-import { SEGMENTS, segmentFor, suggestComparables, AZ_MAKES } from './segments.js';
+import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
 
 // ---------- State ----------
 const STORAGE_KEY = 'lba:v2';
@@ -198,6 +198,7 @@ function candidateHTML(c, i) {
 }
 
 // ---------- Photos ----------
+const phCls = (ph, cls = '') => `${cls}${ph?.custom ? ' contain' : ''}`;
 const photoOf = (c) => c.market?.photo || c.photo?.url || null;
 function imgHTML(url, alt, cls = '') {
   if (!url) return `<div class="ph ${cls} ph-empty" aria-hidden="true"></div>`;
@@ -229,6 +230,51 @@ async function ensurePhotos() {
   if (!jobs.length) return;
   const got = await Promise.all(jobs);
   if (got.some(Boolean)) { renderCarId(); renderResults(); updateModelSummaries(); }
+}
+
+function photoButton() {
+  return `<label class="photo-btn"><input type="file" accept="image/*" data-photo-upload hidden><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>${state.photo?.custom ? 'Change photo' : 'Use your own photo'}</label>`;
+}
+
+// Trim transparent margins, cap at 1400px wide, keep transparency.
+async function preparePhoto(file) {
+  const bmp = await createImageBitmap(file);
+  const scan = document.createElement('canvas');
+  const k = Math.min(1, 600 / bmp.width);
+  scan.width = Math.round(bmp.width * k); scan.height = Math.round(bmp.height * k);
+  const sx = scan.getContext('2d', { willReadFrequently: true });
+  sx.drawImage(bmp, 0, 0, scan.width, scan.height);
+  const d = sx.getImageData(0, 0, scan.width, scan.height).data;
+  let x0 = scan.width, y0 = scan.height, x1 = 0, y1 = 0, alpha = false;
+  for (let y = 0; y < scan.height; y++) for (let x = 0; x < scan.width; x++) {
+    const a = d[(y * scan.width + x) * 4 + 3];
+    if (a < 250) alpha = true;
+    if (a > 10) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  let crop = { x: 0, y: 0, w: bmp.width, h: bmp.height };
+  if (alpha && x1 > x0 && y1 > y0) {
+    const pad = 4;
+    crop = { x: Math.max(0, x0 / k - pad), y: Math.max(0, y0 / k - pad), w: Math.min(bmp.width, (x1 - x0 + 1) / k + 2 * pad), h: Math.min(bmp.height, (y1 - y0 + 1) / k + 2 * pad) };
+  }
+  const s2 = Math.min(1, 1400 / crop.w);
+  const out = document.createElement('canvas');
+  out.width = Math.round(crop.w * s2); out.height = Math.round(crop.h * s2);
+  out.getContext('2d').drawImage(bmp, crop.x, crop.y, crop.w, crop.h, 0, 0, out.width, out.height);
+  return alpha ? out.toDataURL('image/png') : out.toDataURL('image/jpeg', 0.85);
+}
+
+async function uploadPhoto(file) {
+  const status = $('#carStatus');
+  status.className = 'status'; status.textContent = 'Saving your photo…';
+  try {
+    const dataUrl = await preparePhoto(file);
+    const res = await fetch('api/photo-upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: store.active, dataUrl }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Upload failed (${res.status})`);
+    state.photo = { url: body.url, exact: true, custom: true };
+    persist(); renderCarId(); renderResults();
+    status.textContent = 'Photo saved.';
+  } catch (e) { status.className = 'status err'; status.textContent = e.message; }
 }
 
 // ---------- Compare models screen ----------
@@ -267,7 +313,7 @@ function offerSummary(c) {
 
 function summaryHTML(x, buyout) {
   const { c, i, buy, lease, best } = x;
-  const sub = [c.year || 'New', c.trim].filter(Boolean).join(' ');
+  const sub = [c.year || 'New', c.trim].filter(Boolean).join(' ') + (c.reason ? `. ${c.reason}` : '');
   const remove = `<button type="button" class="btn ghost small" data-remove="${i}">Remove</button>`;
   if (!best) {
     return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c))}</div><div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div></header>
@@ -319,6 +365,7 @@ function compareChart(priced, buyout) {
 }
 
 function renderModels() {
+  renderIdeas();
   const seg = state.segment || segmentFor({ make: state.current.make, model: state.current.model, body: state.lookup?.vehicle?.body });
   $('#segment').innerHTML = Object.entries(SEGMENTS).map(([id, sg]) => `<option value="${id}" ${id === seg ? 'selected' : ''}>${esc(sg.label)}</option>`).join('');
   for (const r of $$('input[name="plan"]')) r.checked = r.value === state.pricing.plan;
@@ -352,7 +399,7 @@ function renderCarId() {
     const c = state.current;
     if (c.make && c.model) {
       el.hidden = false;
-      el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', 'car-ph') : ''}<div class="name">${esc([c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))}</div><div class="spec">${c.mpg ? `${esc(c.mpg)} mpg combined` : ''}</div>`;
+      el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', phCls(state.photo, 'car-ph')) : ''}<div class="name">${esc([c.year, c.make, c.model, c.trim].filter(Boolean).join(' '))}</div><div class="spec">${c.mpg ? `${esc(c.mpg)} mpg combined` : ''}</div>${photoButton()}`;
     } else el.hidden = true;
     $('#valueSource').textContent = '';
     return;
@@ -360,8 +407,9 @@ function renderCarId() {
   const v = L.vehicle;
   const open = (L.recalls || []).filter((r) => !/closed|complete|remedied/i.test(r.status || ''));
   el.hidden = false;
-  el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', 'car-ph') : ''}<div class="name">${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' '))}</div>
+  el.innerHTML = `${state.photo?.url ? imgHTML(state.photo.url, 'Your car', phCls(state.photo, 'car-ph')) : ''}<div class="name">${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' '))}</div>
     <div class="spec">${esc([v.style || v.body, v.engine, v.drivetrain, v.mpg ? `${v.mpg} mpg combined` : ''].filter(Boolean).join(', '))}</div>
+    ${photoButton()}
     ${L.recalls ? `<div class="recalls">${open.length ? `${open.length} open recall${open.length > 1 ? 's' : ''}. Details below the results.` : '<span style="color:var(--go)">No open recalls found.</span>'}</div>` : ''}`;
   $('#valueSource').textContent = L.valuation ? `Value source: ${L.valuation.method}.` : '';
 }
@@ -430,8 +478,8 @@ function renderResults() {
   const recalls = state.lookup?.recalls || [];
   el.innerHTML = `
     <article class="sticker ${stickerFresh ? 'fresh' : ''}">
-      <div class="band"><span>Recommendation</span><span>${fmtYears(H)}, ${Number(r.assumptions.annualMiles).toLocaleString()} mi/yr</span></div>
-      <div class="verdict ${winnerPhoto(best) ? 'with-ph' : ''}"><h1>${esc(v.headline)}</h1>${winnerPhoto(best) ? `<figure>${imgHTML(winnerPhoto(best).url, best.vehicle, 'win-ph')}${winnerPhoto(best).exact ? '' : '<figcaption>Similar car, photo from a local listing</figcaption>'}</figure>` : ''}</div>
+      <div class="band"><span>${deadlineShort(state) ? esc(deadlineShort(state)) : 'Recommendation'}</span><span>${H / 12} yrs, ${Math.round(Number(r.assumptions.annualMiles) / 1000)}k mi/yr</span></div>
+      <div class="verdict ${winnerPhoto(best) ? 'with-ph' : ''}"><h1>${esc(v.headline)}</h1>${winnerPhoto(best) ? `<figure>${imgHTML(winnerPhoto(best).url, best.vehicle, phCls(winnerPhoto(best), 'win-ph'))}${winnerPhoto(best).exact ? '' : '<figcaption>Similar car, photo from a local listing</figcaption>'}</figure>` : ''}</div>
       <div class="figures">
         <div><b>${money(best.perMonth)}</b><span>per month, all in</span></div>
         <div><b>${money(best.pvCost)}</b><span>total over ${fmtYears(H)}</span></div>
@@ -560,7 +608,7 @@ let saveTimer;
 function snapshot() {
   const profiles = {};
   for (const [id, p] of Object.entries(store.profiles)) {
-    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, assumptions: p.assumptions, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
+    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, assumptions: p.assumptions, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
   }
   return JSON.stringify({ active: store.active, profiles });
 }
@@ -581,6 +629,7 @@ function hydrate(p) {
     pricing: { ...b.pricing, ...p.pricing },
     segment: p.segment || '',
     photo: p.photo || null,
+    suggested: !!p.suggested,
     assumptions: { ...b.assumptions, ...p.assumptions },
     current: { ...b.current, ...p.current },
     candidates: (p.candidates || []).map((c) => blankCandidate({ ...c, buy: { ...blankCandidate().buy, ...c.buy }, lease: { ...blankCandidate().lease, ...c.lease } })),
@@ -608,10 +657,7 @@ function profileName(p) {
 }
 
 function renderProfiles() {
-  const sel = $('#profileSelect');
-  sel.innerHTML = Object.entries(store.profiles).map(([id, p]) => `<option value="${id}" ${id === store.active ? 'selected' : ''}>${esc(profileName(p))}</option>`).join('')
-    + '<option disabled>──────────</option><option value="__new">Add another car…</option><option value="__rename">Rename this car…</option>'
-    + (Object.keys(store.profiles).length > 1 ? '<option value="__delete">Delete this car…</option>' : '');
+  $('#garageLabel').textContent = profileName(state);
 }
 
 function switchProfile(id) {
@@ -619,52 +665,238 @@ function switchProfile(id) {
   state = store.profiles[id];
   renderAll();
   persist();
+  if (!state.suggested && state.current.make && state.current.model && !state.candidates.length) autoSuggest();
 }
 
-function onProfileSelect(e) {
-  const v = e.target.value;
-  if (v === '__new') {
-    const name = prompt('Name this car (for example, “Carol’s Edge”)', '');
-    if (name !== null) {
-      const id = newId();
-      const p = blankProfile(name.trim() || 'New car');
-      // Carry over where you live and how you drive; the car itself starts blank.
-      p.assumptions = { ...state.assumptions };
-      store.profiles[id] = p;
-      switchProfile(id);
-      setTab('car');
-      return;
-    }
-  } else if (v === '__rename') {
-    const name = prompt('Rename this car', profileName(state));
-    if (name && name.trim()) { state.name = name.trim(); persist(); }
-  } else if (v === '__delete') {
-    if (confirm(`Delete “${profileName(state)}” and everything saved with it?`)) {
-      delete store.profiles[store.active];
-      switchProfile(Object.keys(store.profiles)[0]);
-      return;
-    }
-  } else if (store.profiles[v]) {
-    switchProfile(v);
+const fmtDate = (d) => new Date(`${d}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+function daysUntil(d) {
+  if (!d) return null;
+  const t = new Date(`${d}T12:00:00`);
+  if (Number.isNaN(t.getTime())) return null;
+  return Math.ceil((t - new Date()) / 86400000);
+}
+function deadlineShort(p) {
+  const n = daysUntil(p.current.leaseEndDate);
+  if (n == null) return '';
+  if (n < 0) return 'Lease has ended';
+  return n === 0 ? 'Decide today' : `Decide by ${new Date(`${p.current.leaseEndDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${n} days`;
+}
+function deadlineText(p) {
+  const n = daysUntil(p.current.leaseEndDate);
+  if (n == null) return '';
+  if (n < 0) return `Lease ended ${fmtDate(p.current.leaseEndDate)}`;
+  if (n === 0) return 'Decide today';
+  return `Decide by ${fmtDate(p.current.leaseEndDate)}, ${n} day${n === 1 ? '' : 's'} left`;
+}
+
+function profileVerdict(p) {
+  try {
+    const r = analyze(analysisInput(p.candidates, {}, p));
+    const best = r.scenarios[0];
+    if (!best) return null;
+    const short = best.kind === 'buyout' ? 'Buy out' : best.kind === 'lease' ? `Lease ${best.vehicle.split(' ').slice(-2).join(' ')}` : `Buy ${best.vehicle.split(' ').slice(-2).join(' ')}`;
+    return { short, perMonth: best.perMonth, compared: r.scenarios.length - 1 };
+  } catch { return null; }
+}
+
+function renderGarage() {
+  $('#garageList').innerHTML = Object.entries(store.profiles).map(([id, p]) => {
+    const v = profileVerdict(p);
+    const c = p.current;
+    const sub = [[c.year, c.make, c.model, c.trim].filter(Boolean).join(' '), c.currentMiles ? `${Number(c.currentMiles).toLocaleString()} mi` : ''].filter(Boolean).join(', ');
+    return `<article class="g-car ${id === store.active ? 'on' : ''}">
+      <button type="button" class="g-open" data-open="${id}" aria-label="Open ${esc(profileName(p))}">
+        <div class="g-pic">${imgHTML(p.photo?.url, profileName(p), phCls(p.photo))}</div>
+        <div class="g-text">
+          <b>${esc(profileName(p))}</b>
+          <small>${esc(sub || 'No car details yet')}</small>
+          ${deadlineText(p) ? `<small class="g-deadline">${esc(deadlineText(p))}</small>` : ''}
+        </div>
+        ${v ? `<div class="g-verdict"><span class="tag offer-tag">${esc(v.short)}</span><small>${money(v.perMonth)}/mo all in</small></div>` : ''}
+      </button>
+      <div class="g-actions"><button type="button" class="btn ghost small" data-rename="${id}">Rename</button>${Object.keys(store.profiles).length > 1 ? `<button type="button" class="btn ghost small" data-delete="${id}">Delete</button>` : ''}</div>
+    </article>`;
+  }).join('');
+}
+
+function openGarage() { renderGarage(); $('#garage').showModal(); }
+
+function onGarageClick(e) {
+  const o = e.target.closest('[data-open]');
+  if (o) { $('#garage').close(); switchProfile(o.dataset.open); setTab(wide() ? 'car' : 'verdict'); return; }
+  const r = e.target.closest('[data-rename]');
+  if (r) {
+    const p = store.profiles[r.dataset.rename];
+    const name = prompt('Rename this car', profileName(p));
+    if (name && name.trim()) { p.name = name.trim(); persist(); renderGarage(); renderProfiles(); }
     return;
   }
-  renderProfiles();
+  const d = e.target.closest('[data-delete]');
+  if (d) {
+    const p = store.profiles[d.dataset.delete];
+    if (confirm(`Delete “${profileName(p)}” and everything saved with it?`)) {
+      delete store.profiles[d.dataset.delete];
+      if (store.active === d.dataset.delete) switchProfile(Object.keys(store.profiles)[0]);
+      else persist();
+      renderGarage();
+    }
+  }
+}
+
+// ---------- Add a car (three steps) ----------
+const draft = { step: 1, lookup: null };
+function showStep(n) {
+  draft.step = n;
+  for (const sec of $$('#addCar .step')) sec.hidden = Number(sec.dataset.step) !== n;
+  $('#addStepLabel').textContent = `Step ${n} of 3`;
+  $$('#addCar .steps i').forEach((el, i) => el.classList.toggle('on', i < n));
+  $('#addBack').style.visibility = n > 1 ? 'visible' : 'hidden';
+  const first = $(`#addCar .step[data-step="${n}"] input`);
+  if (first && !wide()) setTimeout(() => first.focus({ preventScroll: true }), 50);
+}
+function startAdd() {
+  if ($('#garage').open) $('#garage').close();
+  Object.assign(draft, { step: 1, lookup: null });
+  for (const id of ['newName', 'newVin', 'newPlate', 'newMiles', 'newBuyout', 'newEnd', 'newAllowed', 'newPayment']) $(`#${id}`).value = '';
+  $('#newZip').value = state.assumptions.zip || '';
+  const opts = STATES.map((x) => `<option ${x === state.assumptions.state ? 'selected' : ''}>${x}</option>`).join('');
+  $('#newState').innerHTML = opts; $('#newPlateState').innerHTML = opts;
+  for (const id of ['step1Status', 'step2Status', 'step3Status']) { $(`#${id}`).textContent = ''; $(`#${id}`).className = 'status'; }
+  for (const r of $$('input[name="newPlan"]')) r.checked = r.value === (state.pricing.plan || 'public');
+  showStep(1);
+  $('#addCar').showModal();
+}
+function stepStatus(n, msg, err = false) { const el = $(`#step${n}Status`); el.textContent = msg; el.className = `status${err ? ' err' : ''}`; }
+
+async function step1() {
+  const vin = $('#newVin').value.trim().toUpperCase();
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) { stepStatus(1, 'A VIN is 17 letters and numbers (never I, O or Q). Check it and try again.', true); return; }
+  const btn = $('#step1Go'); btn.disabled = true;
+  stepStatus(1, 'Looking up this car…');
+  try {
+    const r = await api(`api/vehicle/${vin}`);
+    if (!r.vehicle?.make) throw new Error('That VIN didn’t match a vehicle. Check for a typo.');
+    draft.lookup = r; draft.vin = vin;
+    draft.photo = null;
+    api(`api/photo?${new URLSearchParams({ vin, year: r.vehicle.year || '', make: r.vehicle.make, model: r.vehicle.model, zip: $('#newZip').value })}`)
+      .then((ph) => { if (ph.url) { draft.photo = ph; renderConfirm(); } }).catch(() => {});
+    if (!$('#newName').value.trim()) $('#newName').value = `My ${r.vehicle.model}`;
+    renderConfirm();
+    stepStatus(1, '');
+    showStep(2);
+    refreshUsage();
+  } catch (e) { stepStatus(1, e.message, true); } finally { btn.disabled = false; }
+}
+
+function renderConfirm() {
+  const r = draft.lookup; if (!r) return;
+  const v = r.vehicle;
+  const open = (r.recalls || []).filter((x) => !/closed|complete|remedied/i.test(x.status || ''));
+  $('#confirmCard').innerHTML = `<div class="confirm">
+    <div class="c-pic">${imgHTML(draft.photo?.url, [v.year, v.make, v.model].join(' '))}${draft.photo && !draft.photo.exact ? '<small>Similar car from a local listing</small>' : ''}</div>
+    <b class="c-name">${esc([v.year, v.make, v.model, v.trim].filter(Boolean).join(' '))}</b>
+    <small>${esc([v.style || v.body, v.engine, v.drivetrain, v.mpg ? `${v.mpg} mpg combined` : ''].filter(Boolean).join(', '))}</small>
+    <dl class="c-facts">
+      <div><dt>Worth today</dt><dd>${draft.value ? money(draft.value.marketValue) : 'after miles'}</dd></div>
+      <div><dt>Open recalls</dt><dd>${r.recalls ? open.length : '—'}</dd></div>
+    </dl>
+  </div>`;
+}
+
+async function step2() {
+  const miles = Number(String($('#newMiles').value).replace(/[^\d]/g, ''));
+  const zip = $('#newZip').value.trim();
+  if (!miles) { stepStatus(2, 'Enter the odometer reading.', true); return; }
+  if (!/^\d{5}$/.test(zip)) { stepStatus(2, 'Enter a 5-digit ZIP.', true); return; }
+  const btn = $('#step2Go'); btn.disabled = true;
+  stepStatus(2, 'Checking what it’s worth…');
+  try {
+    const r = await api(`api/vehicle/${draft.vin}?miles=${miles}&zip=${zip}`);
+    draft.lookup = r; draft.miles = miles; draft.zip = zip; draft.state = $('#newState').value;
+    draft.value = r.valuation || null;
+    renderConfirm();
+    stepStatus(2, '');
+    showStep(3);
+    if (!draft.value) stepStatus(3, 'No market value came back for this car. You can enter one later on the Your car tab.', true);
+    refreshUsage();
+  } catch (e) { stepStatus(2, e.message, true); } finally { btn.disabled = false; }
+}
+
+function step3() {
+  const buyout = Number(String($('#newBuyout').value).replace(/[^\d.]/g, ''));
+  if (!buyout) { stepStatus(3, 'Enter the buyout price from your payoff quote.', true); return; }
+  const v = draft.lookup.vehicle;
+  const id = newId();
+  const p = blankProfile($('#newName').value.trim() || `My ${v.model}`);
+  p.assumptions = { ...state.assumptions, zip: draft.zip, state: draft.state, salesTaxPct: draft.state === state.assumptions.state ? state.assumptions.salesTaxPct : '', leaseTaxPct: draft.state === state.assumptions.state ? state.assumptions.leaseTaxPct : '', tradeInTaxCredit: '' };
+  p.current = {
+    ...p.current,
+    vin: draft.vin, year: String(v.year || ''), make: v.make, model: v.model, trim: v.trim || '', mpg: v.mpg ? String(v.mpg) : '',
+    marketValue: draft.value ? String(Math.round(draft.value.marketValue)) : '', msrp: draft.value?.msrp ? String(Math.round(draft.value.msrp)) : '',
+    currentMiles: String(draft.miles), buyoutPrice: String(buyout), leaseEndDate: $('#newEnd').value || '',
+    allowedMiles: String($('#newAllowed').value).replace(/[^\d]/g, ''), monthlyPayment: String($('#newPayment').value).replace(/[^\d.]/g, ''),
+  };
+  p.lookup = draft.lookup;
+  p.photo = draft.photo || null;
+  p.pricing = { ...p.pricing, plan: ($$('input[name="newPlan"]').find((r) => r.checked) || {}).value || 'public' };
+  store.profiles[id] = p;
+  $('#addCar').close();
+  switchProfile(id); // runs suggestions for the new car
+  setTab('verdict');
+}
+
+// ---------- Suggestions ----------
+const DISCONTINUED = new Set(['ford|edge', 'ford|ecosport', 'ford|fusion', 'ford|focus', 'chevrolet|malibu', 'ford|escape']);
+function suggestionList(p = state) {
+  const cur = { make: p.current.make, model: p.current.model, body: p.lookup?.vehicle?.body };
+  if (!cur.make || !cur.model) return [];
+  const items = suggestions(cur, 12).items;
+  if (!DISCONTINUED.has(`${cur.make}|${cur.model}`.toLowerCase())) items.unshift({ make: cur.make, model: cur.model, reason: 'A new one of the same model' });
+  const have = new Set(p.candidates.map((c) => `${c.make}|${c.model}`.toLowerCase()));
+  return items.filter((x) => !have.has(`${x.make}|${x.model}`.toLowerCase()));
+}
+
+function addSuggestion(x, { price = true } = {}) {
+  state.candidates.push(blankCandidate({ year: '', make: x.make, model: x.model, reason: x.reason }));
+  if (price) priceCandidate(state.candidates.length - 1);
+}
+
+function autoSuggest(n = 5) {
+  state.suggested = true;
+  const list = suggestionList().slice(0, n);
+  if (!list.length) return;
+  for (const x of list) addSuggestion(x, { price: false });
+  renderModels(); persist();
+  $('#modelsStatus').textContent = `Suggested ${list.map((x) => `${x.make} ${x.model}`).join(', ')}. Getting prices…`;
+  priceAll(true);
+}
+
+function renderIdeas() {
+  const list = suggestionList().slice(0, 8);
+  const el = $('#ideas');
+  if (!list.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<h3 class="ideas-h">Suggested for your ${esc(state.current.model)}</h3><div class="ideas">${list.map((x, i) => `<button type="button" class="idea" data-idea="${i}"><b>+ ${esc(x.make)} ${esc(x.model)}</b><small>${esc(x.reason)}</small></button>`).join('')}</div>`;
+  el.onclick = (e) => {
+    const b = e.target.closest('[data-idea]'); if (!b) return;
+    const x = list[Number(b.dataset.idea)];
+    addSuggestion(x);
+  };
 }
 
 // ---------- Pricing plans (Ford A/Z-Plan) ----------
-const planPct = () => (state.pricing.plan === 'public' ? 0 : Number(state.pricing[state.pricing.plan]) || 0);
+const planPct = (p = state) => (p.pricing.plan === 'public' ? 0 : Number(p.pricing[p.pricing.plan]) || 0);
 const azEligible = (c) => AZ_MAKES.has(String(c.make || '').toLowerCase());
-function effectivePrice(c) {
-  const pct = planPct();
+function effectivePrice(c, p = state) {
+  const pct = planPct(p);
   const msrp = Number(c.msrp) || 0;
   if (pct > 0 && azEligible(c) && msrp > 0) return Math.round(msrp * (1 - pct / 100));
   return Number(c.sellingPrice) || 0;
 }
-function analysisInput(candidates = state.candidates, extra = {}) {
+function analysisInput(candidates = state.candidates, extra = {}, p = state) {
   return {
-    ...state,
+    ...p,
     today: new Date().toISOString(),
-    candidates: candidates.map((c) => ({ ...c, label: c.label || [c.year, c.make, c.model, c.trim].filter(Boolean).join(' ') || undefined, sellingPrice: effectivePrice(c) || c.sellingPrice })),
+    candidates: candidates.map((c) => ({ ...c, label: c.label || [c.year, c.make, c.model, c.trim].filter(Boolean).join(' ') || undefined, sellingPrice: effectivePrice(c, p) || c.sellingPrice })),
     ...extra,
   };
 }
@@ -844,24 +1076,88 @@ function addComparables() {
   const seg = $('#segment').value;
   state.segment = seg;
   const cur = { make: state.current.make, model: state.current.model, body: state.lookup?.vehicle?.body };
-  const isCurrent = ([mk, md]) => mk.toLowerCase() === (cur.make || '').toLowerCase() && md.toLowerCase() === (cur.model || '').toLowerCase();
-  const list = !seg || seg === segmentFor(cur)
-    ? suggestComparables(cur, 6).models
-    : SEGMENTS[seg].models.filter((m) => !isCurrent(m)).slice(0, 6);
+  if (!seg || seg === segmentFor(cur)) { const before = state.candidates.length; autoSuggest(6); if (state.candidates.length === before) $('#modelsStatus').textContent = 'All the top suggestions are already in your list.'; return; }
   const have = new Set(state.candidates.map((c) => `${c.make}|${c.model}`.toLowerCase()));
-  const added = [];
-  for (const [make, model] of list) {
-    if (have.has(`${make}|${model}`.toLowerCase())) continue;
-    state.candidates.push(blankCandidate({ year: '', make, model }));
-    added.push(`${make} ${model}`);
-  }
+  const list = SEGMENTS[seg].models.filter(([mk, md]) => !have.has(`${mk}|${md}`.toLowerCase()) && !(mk === cur.make && md === cur.model)).slice(0, 6);
+  for (const [make, model] of list) state.candidates.push(blankCandidate({ year: '', make, model, reason: SEGMENTS[seg].label }));
   renderModels(); persist();
-  if (added.length) {
-    $('#modelsStatus').textContent = `Added ${added.join(', ')}. Getting prices…`;
-    priceAll(true);
-  } else {
-    $('#modelsStatus').textContent = 'Those models are already in your list.';
+  if (list.length) { $('#modelsStatus').textContent = `Added ${list.map((x) => x.join(' ')).join(', ')}. Getting prices…`; priceAll(true); }
+  else $('#modelsStatus').textContent = 'Those models are already in your list.';
+}
+
+// ---------- Ask (Gemini) ----------
+const askThread = [];
+function askContext() {
+  const r = lastAnalysis;
+  const c = state.current;
+  const round = (x) => (Number.isFinite(x) ? Math.round(x) : null);
+  return {
+    car: { name: profileName(state), year: c.year, make: c.make, model: c.model, trim: c.trim, miles: c.currentMiles, mpg: c.mpg, originalMsrp: c.msrp },
+    lease: { buyoutPrice: c.buyoutPrice, leaseEndDate: c.leaseEndDate, daysToDecide: daysUntil(c.leaseEndDate), milesAllowed: c.allowedMiles, monthlyPayment: c.monthlyPayment, excessMileRate: c.excessMileRate, dispositionFee: c.dispositionFee },
+    howTheyPay: { payCash: c.payCash, loanApr: c.apr || 7, loanMonths: c.termMonths },
+    situation: { zip: state.assumptions.zip, state: state.assumptions.state, yearsToKeepNextCar: state.assumptions.horizonYears, milesPerYear: state.assumptions.annualMiles, fordPricing: state.pricing.plan === 'public' ? 'public' : `${state.pricing.plan}-Plan at ${state.pricing[state.pricing.plan]}% off MSRP` },
+    recalls: (state.lookup?.recalls || []).map((x) => ({ title: x.title, status: x.status })).slice(0, 8),
+    equity: r ? Object.fromEntries(Object.entries(r.equity).map(([k, v]) => [k, typeof v === 'number' ? round(v) : v])) : null,
+    verdict: r?.verdict || null,
+    optionsCheapestFirst: (r?.scenarios || []).map((x) => ({ option: x.title, allInPerMonth: round(x.perMonth), totalOverHorizon: round(x.pvCost), payment: round(x.monthlyPayment), upfront: round(x.upfront), worthAtEnd: round(x.valueAtEnd), estimatedPayment: !!x.estimated, notes: x.notes })),
+    newCarsCompared: state.candidates.map((x) => ({ name: [x.year, x.make, x.model, x.trim].filter(Boolean).join(' '), whySuggested: x.reason || null, priceUsed: effectivePrice(x), streetPrice: Number(x.sellingPrice) || null, msrp: Number(x.msrp) || null, mpg: x.mpg || null, forSaleNearby: x.market?.count ?? null, offers: (x.offers || []).slice(0, 8).map((o) => ({ type: o.type, monthly: o.monthly, apr: o.apr, term: o.term, dueAtSigning: o.dueAtSigning, cashBack: o.cashback, forWho: o.group, ends: o.validThrough })) })),
+    assumptionsNote: 'All-in monthly = payments, interest, taxes, fees, registration, insurance, fuel and maintenance, minus resale value at the end, spread over the horizon, discounted at 4%/yr.',
+  };
+}
+
+function askSuggestions() {
+  const m = state.current.model || 'car';
+  const best = lastAnalysis?.scenarios?.[0];
+  const qs = [
+    `Should I buy out the ${m}? Explain the main reasons.`,
+    'What should I check or negotiate before I sign anything?',
+    `How reliable is a ${[state.current.year, state.current.make, m].filter(Boolean).join(' ')} as it ages?`,
+  ];
+  if (best && best.kind !== 'buyout') qs.splice(1, 0, `Why is ${best.vehicle} cheaper than keeping my ${m}?`);
+  if (AZ_MAKES.has(String(state.current.make).toLowerCase())) qs.push('How does Ford A-Plan vs Z-Plan change this?');
+  qs.push('Is now a good time to buy a car, or should I wait?');
+  return qs.slice(0, 5);
+}
+
+function mdLite(t) {
+  const lines = esc(t).split('\n');
+  let html = '', inList = false;
+  for (const raw of lines) {
+    const line = raw.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/(^|\s)\*(?!\s)(.+?)\*(?=\s|$)/g, '$1<i>$2</i>');
+    const m = /^\s*(?:[-*•]|\d+\.)\s+(.*)$/.exec(line);
+    if (m) { if (!inList) { html += '<ul>'; inList = true; } html += `<li>${m[1]}</li>`; continue; }
+    if (inList) { html += '</ul>'; inList = false; }
+    if (line.trim().replace(/^#+\s*/, '')) html += `<p>${line.replace(/^#+\s*/, '')}</p>`;
   }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function renderAsk() {
+  $('#askCar').textContent = profileName(state);
+  $('#askThread').innerHTML = askThread.filter((x) => x.profile === store.active).map((x) => `<div class="q">${esc(x.q)}</div>
+    <div class="a ${x.error ? 'err' : ''}">${x.pending ? '<p class="thinking">Thinking…</p>' : x.error ? `<p>${esc(x.error)}</p>` : mdLite(x.a)}
+    ${x.sources?.length ? `<p class="srcs">Sources: ${x.sources.map((s2) => `<a href="${esc(s2.url)}" target="_blank" rel="noopener noreferrer">${esc(s2.title)}</a>`).join(', ')}</p>` : ''}</div>`).join('');
+  $('#askChips').innerHTML = askSuggestions().map((q) => `<button type="button" class="chip" data-q="${esc(q)}">${esc(q)}</button>`).join('');
+  const t = $('#askThread'); t.scrollTop = t.scrollHeight;
+}
+
+function openAsk() { renderAsk(); $('#askSheet').showModal(); if (wide()) $('#askInput').focus(); }
+
+async function sendAsk(q) {
+  q = String(q || '').trim(); if (!q) return;
+  $('#askInput').value = '';
+  const item = { profile: store.active, q, pending: true };
+  askThread.push(item); renderAsk();
+  $('#askSend').disabled = true;
+  try {
+    const res = await fetch('api/ask', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, context: askContext() }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    Object.assign(item, { pending: false, a: body.answer, sources: body.sources || [] });
+  } catch (e) {
+    Object.assign(item, { pending: false, error: e.message });
+  } finally { $('#askSend').disabled = false; renderAsk(); }
 }
 
 // ---------- Tabs ----------
@@ -918,7 +1214,32 @@ function wire() {
   $('#lookupVin').addEventListener('click', lookupVin);
   $('#vin').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookupVin(); } });
   $('#lookupPlate').addEventListener('click', lookupPlate);
-  $('#profileSelect').addEventListener('change', onProfileSelect);
+  document.addEventListener('change', (e) => { const f = e.target.closest?.('[data-photo-upload]'); if (f && f.files?.[0]) uploadPhoto(f.files[0]); });
+  $('#garageBtn').addEventListener('click', openGarage);
+  $('#garageList').addEventListener('click', onGarageClick);
+  $('#startAdd').addEventListener('click', startAdd);
+  $('#step1Go').addEventListener('click', step1);
+  $('#newVin').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); step1(); } });
+  $('#step2Go').addEventListener('click', step2);
+  $('#notMine').addEventListener('click', () => showStep(1));
+  $('#step3Go').addEventListener('click', step3);
+  $('#addBack').addEventListener('click', () => showStep(Math.max(1, draft.step - 1)));
+  $('#newPlateGo').addEventListener('click', async () => {
+    const plate = $('#newPlate').value.trim(); if (!plate) return;
+    stepStatus(1, 'Finding the VIN for that plate…');
+    try {
+      const r = await api(`api/plate?state=${encodeURIComponent($('#newPlateState').value)}&plate=${encodeURIComponent(plate)}`);
+      if (!r.vin) throw new Error(r.errors?.[0]?.message ? `Plate lookup unavailable: ${r.errors[0].message}` : 'No VIN found for that plate.');
+      $('#newVin').value = r.vin; step1();
+    } catch (e) { stepStatus(1, e.message, true); }
+  });
+  for (const d of $$('dialog.sheet')) {
+    d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
+  }
+  $('#askBtn').addEventListener('click', openAsk);
+  $('#askForm').addEventListener('submit', (e) => { e.preventDefault(); sendAsk($('#askInput').value); });
+  $('#askInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAsk($('#askInput').value); } });
+  $('#askChips').addEventListener('click', (e) => { const b = e.target.closest('[data-q]'); if (b) sendAsk(b.dataset.q); });
   for (const b of $$('.tabs [role="tab"]')) b.addEventListener('click', () => setTab(b.dataset.tab));
   document.addEventListener('click', (e) => { const g = e.target.closest('[data-goto]'); if (g) { e.preventDefault(); setTab(g.dataset.goto); } });
   $('#suggest').addEventListener('click', addComparables);
@@ -992,4 +1313,5 @@ window.addEventListener('resize', () => {
   wire();
   setTab(wide() ? 'car' : 'verdict');
   refreshUsage();
+  if (!state.suggested && state.current.make && state.current.model && !state.candidates.length) autoSuggest();
 })();

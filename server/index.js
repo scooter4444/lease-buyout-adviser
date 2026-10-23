@@ -12,7 +12,7 @@ import { ask, askConfigured } from './ask.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '8mb' }));
 
 // Keep the app out of search engines: link-only access.
 app.use((_req, res, next) => { res.set('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet'); next(); });
@@ -65,6 +65,23 @@ app.get('/api/autodev/tco/:vin', wrap((req) => autodevTco({ vin: req.params.vin,
 app.get('/api/autodev/apr/:vin', wrap((req) => autodevApr({ vin: req.params.vin, ...req.query })));
 
 // One saved profile (your car + comparisons) so phone and laptop see the same numbers.
+// Your own car photos (uploaded from the app), kept on the volume, never in the repo.
+const PHOTOS = path.join(cacheDir, 'photos');
+try { fs.mkdirSync(PHOTOS, { recursive: true }); } catch {}
+app.use('/photos', express.static(PHOTOS, { maxAge: '30d' }));
+app.post('/api/photo-upload', (req, res) => {
+  const { id, dataUrl } = req.body || {};
+  const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  const safe = String(id || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 40);
+  if (!m || !safe) return res.status(400).json({ error: 'Send a PNG, JPEG or WebP image.' });
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 6 * 1024 * 1024) return res.status(413).json({ error: 'That image is too large (6 MB max).' });
+  const file = `${safe}.${m[1] === 'jpeg' ? 'jpg' : m[1]}`;
+  for (const ext of ['png', 'jpg', 'webp']) { try { fs.unlinkSync(path.join(PHOTOS, `${safe}.${ext}`)); } catch {} }
+  fs.writeFileSync(path.join(PHOTOS, file), buf);
+  res.json({ url: `photos/${file}?v=${Date.now()}` });
+});
+
 // Saved cars live here (shape: { active, profiles: { id: {...} } }).
 // SEED_PROFILE (a Railway variable, never committed) pre-loads cars on first run.
 const PROFILE = path.join(cacheDir, 'profile.json');
