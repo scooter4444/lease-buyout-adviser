@@ -10,29 +10,29 @@ const ui = { view: 'overview', sort: 'iihs', h2h: 0, tests: null, rev: 0, spin: 
 
 // ---------- Photos: a real car for sale, sorted into a walkaround and interior shots ----------
 const galleries = new Map(); // key -> result | 'pending' | 'failed'
-const CATS = [['exterior', 'Outside'], ['dash', 'Dash'], ['screen', 'Screens'], ['front-seats', 'Front seats'], ['rear-seats', 'Rear seats'], ['roof', 'Sunroof'], ['cargo', 'Cargo'], ['console', 'Console'], ['third-row', 'Third row']];
+const CATS = [['exterior', 'Outside'], ['dash', 'Dash'], ['screen', 'Screens'], ['front-seats', 'Front seats'], ['rear-seats', 'Rear seats'], ['roof', 'Sunroof'], ['cargo', 'Cargo'], ['console', 'Console'], ['third-row', 'Third row'], ['inside', 'Inside']];
 const catName = (k) => (CATS.find((c) => c[0] === k) || [k, k])[1];
 function galleryFor(x, ctx) {
   const c = x.car, rec = x.rec;
-  const used = x.mine || (c.condition && c.condition !== 'new');
-  const trim = c.trim || (rec.researched ? rec.trim : '');
-  const year = c.year || rec.year || '';
-  const key = [year, c.make, c.model, trim, used ? 'u' : 'n'].join('|');
+  // The server fills in year and trim from the researched deal, the same way its overnight pre-load does.
+  const q = { year: c.year || '', make: c.make, model: c.model, trim: c.trim || '', condition: x.mine ? 'used' : c.condition || 'new', mine: x.mine ? '1' : '', zip: ctx.zip || '' };
+  const key = JSON.stringify(q);
   const got = galleries.get(key);
   if (!got) {
     galleries.set(key, 'pending');
-    ctx.api(`api/gallery?${new URLSearchParams({ year, make: c.make, model: c.model, trim, used: used ? '1' : '', zip: ctx.zip || '' })}`)
+    ctx.api(`api/gallery?${new URLSearchParams(q)}`)
       .then((r) => { galleries.set(key, r); ctx.rerender(); })
       .catch(() => { galleries.set(key, 'failed'); ctx.rerender(); });
     return { state: 'pending' };
   }
   if (got === 'pending' || got === 'failed') return { state: got };
   const good = got.photos.filter((p) => p.ok !== false);
-  // Without sorting, dealers usually lead with outside shots: use the first eight as the walkaround.
-  const ext = got.sorted ? good.filter((p) => p.cat === 'exterior' && p.angle != null).sort((a, b) => a.angle - b.angle) : good.slice(0, 8);
+  // The server picks evenly spaced outside frames; older cached results fall back to angle order.
+  const ext = (got.spin || []).map((i) => got.photos[i]).filter(Boolean);
+  if (!ext.length) ext.push(...good.filter((p) => p.cat === 'exterior').sort((a, b) => (a.angle ?? 0) - (b.angle ?? 0)).slice(0, 10));
   const byCat = {};
-  for (const p of good) if (got.sorted && p.cat && p.cat !== 'exterior') (byCat[p.cat] ||= []).push(p);
-  if (got.sorted) byCat.exterior = ext;
+  for (const p of good) if (p.cat && p.cat !== 'exterior') (byCat[p.cat] ||= []).push(p);
+  byCat.exterior = good.filter((p) => p.cat === 'exterior');
   return { state: got.listing ? 'ready' : 'none', g: got, ext, byCat, all: good };
 }
 function sourceLine(G, esc) {
@@ -57,16 +57,17 @@ function spinView(list, ctx) {
   return `${chips}
     <section class="g-spin-card">
       <div class="g-spin" data-spin="${n}" aria-label="Drag to walk around the car">
-        ${G.ext.map((p, i) => `<img src="${esc(p.url)}" alt="${esc(`${x.rec.make} ${x.rec.model}${p.angle != null ? `, from ${p.angle}°` : ''}`)}" class="${i === f ? 'on' : ''}" draggable="false" loading="${i < 3 ? 'eager' : 'lazy'}" referrerpolicy="no-referrer">`).join('')}
+        <span class="g-load" aria-live="polite">Loading the walkaround…</span>
+        ${G.ext.map((p, i) => `<img src="${esc(p.url)}" alt="${esc(`${x.rec.make} ${x.rec.model}${p.angle != null ? `, from ${p.angle}°` : ''}`)}" class="${i === f ? 'on' : ''}" draggable="false" decoding="async" referrerpolicy="no-referrer">`).join('')}
         <span class="g-hint" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 4 0 0 0 18 0"></path><path d="M17 15l4-3-4-3"></path></svg>Drag to turn</span>
       </div>
       <label class="g-range"><span class="sr-only">Turn the car</span><input type="range" min="0" max="${Math.max(0, n - 1)}" value="${f}" data-range></label>
-      <p class="fine">${sourceLine(G, esc)}${G.g.sorted ? '' : ' Photos aren’t sorted yet, so the turn may jump.'}</p>
+      <p class="fine">${sourceLine(G, esc)}${G.g.sorted ? '' : ' These photos are only roughly sorted for now; they get sorted properly overnight.'}</p>
     </section>
     ${insideCats.length ? insideCats.map(([k, label]) => `
       <section class="g-row"><h3>${esc(label)}</h3>
-        <div class="g-strip">${G.byCat[k].map((p) => `<button type="button" class="g-thumb" data-s="zoom" data-k="${esc(p.url)}" aria-label="${esc(`${label}, larger`)}"><img src="${esc(p.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div>
-      </section>`).join('') : `<section class="g-row"><h3>All photos</h3><div class="g-strip">${G.all.map((p) => `<button type="button" class="g-thumb" data-s="zoom" data-k="${esc(p.url)}" aria-label="Photo, larger"><img src="${esc(p.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div></section>`}`;
+        <div class="g-strip">${G.byCat[k].map((p) => `<button type="button" class="g-thumb" data-s="zoom" data-k="${esc(p.full || p.url)}" aria-label="${esc(`${label}, larger`)}"><img src="${esc(p.thumb || p.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div>
+      </section>`).join('') : `<section class="g-row"><h3>All photos</h3><div class="g-strip">${G.all.map((p) => `<button type="button" class="g-thumb" data-s="zoom" data-k="${esc(p.full || p.url)}" aria-label="Photo, larger"><img src="${esc(p.thumb || p.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`).join('')}</div></section>`}`;
 }
 
 function sideBySide(A, B, ctx) {
@@ -77,10 +78,10 @@ function sideBySide(A, B, ctx) {
   if (!cats.length) return '';
   const cat = cats.some(([k]) => k === ui.cat) ? ui.cat : cats[0][0];
   const side = (G, x, which) => {
-    const ps = G.byCat?.[cat] || [];
+    const ps = cat === 'exterior' ? G.ext : G.byCat?.[cat] || [];
     if (!ps.length) return `<figure class="g-side"><div class="g-none">No ${esc(catName(cat).toLowerCase())} photo in this listing</div><figcaption>${esc(x.mine ? `Her ${x.rec.model}` : x.rec.model)}</figcaption></figure>`;
     const i = ui.sbs[which] % ps.length;
-    return `<figure class="g-side"><button type="button" class="g-big" data-s="zoom" data-k="${esc(ps[i].url)}" aria-label="Larger"><img src="${esc(ps[i].url)}" alt="${esc(`${x.rec.model} ${catName(cat).toLowerCase()}`)}" referrerpolicy="no-referrer"></button>
+    return `<figure class="g-side"><button type="button" class="g-big" data-s="zoom" data-k="${esc(ps[i].full || ps[i].url)}" aria-label="Larger"><img src="${esc(ps[i].url)}" alt="${esc(`${x.rec.model} ${catName(cat).toLowerCase()}`)}" referrerpolicy="no-referrer"></button>
       <figcaption>${esc(x.mine ? `Her ${x.rec.model}` : x.rec.model)}${ps.length > 1 ? ` <button type="button" class="g-more" data-s="sbs" data-k="${which}">${i + 1} of ${ps.length}</button>` : ''}</figcaption></figure>`;
   };
   return `<section class="g-sbs" aria-label="Side by side photos">
@@ -443,6 +444,22 @@ export function renderSafety(el, ctx) {
     <div class="s-body">${body}</div>
     <dialog class="g-zoom" id="gZoom"><img alt=""><button type="button" class="icon-btn" data-close aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></dialog>`;
   wire(el, ctx, list);
+  trackSpinLoad(el);
+}
+
+// Show progress until every walkaround frame has loaded, so dragging never shows a blank.
+function trackSpinLoad(el) {
+  const box = el.querySelector('.g-spin');
+  if (!box) return;
+  const imgs = [...box.querySelectorAll('img')];
+  const label = box.querySelector('.g-load');
+  const update = () => {
+    const done = imgs.filter((i) => i.complete).length;
+    if (done >= imgs.length) { box.classList.add('ready'); return; }
+    if (label) label.textContent = `Loading the walkaround… ${done} of ${imgs.length}`;
+  };
+  imgs.forEach((i) => { i.addEventListener('load', update, { once: true }); i.addEventListener('error', update, { once: true }); });
+  update();
 }
 
 function wire(el, ctx, list) {

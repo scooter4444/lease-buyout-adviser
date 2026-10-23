@@ -811,3 +811,5 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
 .g-zoom::backdrop { background: rgba(8, 12, 20, 0.88); }
 .g-zoom img { display: block; max-width: 100%; max-height: 92vh; border-radius: var(--r-md); }
 .g-zoom .icon-btn { position: absolute; top: 8px; right: 8px; background: rgba(255, 255, 255, 0.92); color: #14213D; border-radius: 50%; }
+.g-load { position: absolute; right: 12px; top: 12px; z-index: 2; padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.92); color: #14213D; font-size: 0.75rem; font-weight: 600; }
+.g-spin.ready .g-load { display: none; }

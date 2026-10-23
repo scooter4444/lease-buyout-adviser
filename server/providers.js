@@ -5,6 +5,8 @@
 import { getCached, setCached, countCall } from './cache.js';
 import * as mock from './mock.js';
 import { classifyCarPhotos } from './ask.js';
+import { readFileSync } from 'node:fs';
+import { signImg, resized, WIDTHS } from './images.js';
 
 const MC_BASE = 'https://api.marketcheck.com';
 const AD_BASE = 'https://api.auto.dev';
@@ -530,53 +532,137 @@ export async function nhtsaSafety({ year, make, model }) {
 }
 
 // ---------- Gallery: a real car for sale, its photos sorted into a walkaround and interior shots ----------
+
 const WHITE = /white|blanc|pearl|frost|platinum|snow|glacier|ice|chalk|ivory|alpine/i;
-export async function gallery({ year, make, model, trim, zip, used, color = 'white' }) {
-  if (!make || !model) throw new ProviderError('app', 400, 'make and model are required');
-  const isUsed = used === '1' || used === 'true' || used === true;
-  const ck = `gallery:v1:${[year, make, model, trim, isUsed ? 'u' : 'n', String(zip || '').slice(0, 3), color].join('|').toLowerCase()}`;
-  const hit = getCached(ck);
-  if (hit !== undefined) return hit;
-  if (MOCK) return mock.gallery({ year, make, model, trim });
+const nrm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+let SAFETY = null;
+function researched(make, model) {
+  if (SAFETY === null) { try { SAFETY = JSON.parse(readFileSync(new URL('../public/data/safety.json', import.meta.url))).cars || []; } catch { SAFETY = []; } }
+  const mk = nrm(make), md = nrm(model);
+  return SAFETY.find((c) => nrm(c.make) === mk && (nrm(c.model) === md || md.startsWith(nrm(c.model)) || nrm(c.model).startsWith(md))) || null;
+}
+// Same inputs from the app and from the overnight pre-load, so both hit the same cache entry.
+export function galleryParams({ year, make, model, trim, condition, mine, zip }) {
+  const r = researched(make, model);
+  const used = !!mine || (!!condition && condition !== 'new');
+  return { year: String(year || r?.year || ''), make, model, trim: String(trim || r?.trim || '').replace(/\b(AWD|FWD|RWD|4WD|SH-AWD)\b/gi, '').replace(/\s+/g, ' ').trim(), used, zip3: String(zip || '').slice(0, 3), zip: zip || '' };
+}
+const galleryKey = (g) => `gallery:v2:${[g.year, g.make, g.model, g.trim, g.used ? 'u' : 'n', g.zip3].join('|').toLowerCase()}`;
+
+// When sorting isn't available: dealers lead with outside shots, so the first third or so are outside.
+export function guessTags(n) {
+  const outside = Math.max(6, Math.min(12, Math.round(n * 0.35)));
+  return new Map(Array.from({ length: n }, (_, i) => [i, { cat: i < outside ? 'exterior' : 'inside', angle: null, ok: true, guessed: true }]));
+}
+// The best photo for each 45° step around the car, so the turn is even, not jumpy.
+export function spinFrames(photos) {
+  const ext = photos.filter((p) => p.cat === 'exterior' && p.ok !== false);
+  const withAngle = ext.filter((p) => p.angle != null);
+  if (withAngle.length < 4) return ext.slice(0, 10);
+  const dist = (a, b) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+  const frames = [];
+  for (let b = 0; b < 360; b += 45) {
+    const best = withAngle.filter((p) => dist(p.angle, b) <= 22.5).sort((x, y) => dist(x.angle, b) - dist(y.angle, b))[0];
+    if (best && !frames.includes(best)) frames.push(best);
+  }
+  return frames.length >= 4 ? frames : withAngle.sort((a, b) => a.angle - b.angle);
+}
+
+async function photoTags(listingId, urls) {
+  const tk = `tags:${listingId}`;
+  const known = getCached(tk);
+  if (known) return new Map(known);
+  // Small JPEGs keep the request light and fast.
+  const inline = await Promise.all(urls.map(async (u) => {
+    try { const r = await resized(u, 512, 'jpeg'); return { mime_type: r.type, data: r.buf.toString('base64') }; } catch { return null; }
+  }));
+  const tags = await classifyCarPhotos(inline).catch(() => null);
+  if (tags) setCached(tk, [...tags], 60 * DAY);
+  return tags;
+}
+
+export async function gallery(q, { refresh = false } = {}) {
+  if (!q.make || !q.model) throw new ProviderError('app', 400, 'make and model are required');
+  const g = q.zip3 !== undefined ? q : galleryParams({ ...q, mine: q.mine === '1' || q.mine === true });
+  const ck = galleryKey(g);
+  const prev = getCached(ck);
+  const age = prev ? Date.now() - (prev.fetchedAt || 0) : Infinity;
+  // From the app: whatever is cached. From the pre-load: re-check listings every 3 days, and retry unsorted ones.
+  if (prev && (!refresh || (age < 3 * DAY * 1000 && prev.sorted))) return prev;
+  if (MOCK) { const m = await mock.gallery(g); const out = finish(m.listing, m.photos.map((p) => ({ ...p, url: p.url, thumb: p.url, full: p.url })), true, false); setCached(ck, out, 14 * DAY); return out; }
+
   const errors = [];
-  const base = { car_type: isUsed ? 'used' : 'new', year, make, model, zip, radius: 250, rows: 25 };
+  const base = { car_type: g.used ? 'used' : 'new', year: g.year || undefined, make: g.make, model: g.model, zip: g.zip || undefined, radius: 250, rows: 25 };
   let L = [];
-  // White first (the family cares), then any color; trim if it narrows to something.
-  for (const extra of [{ trim, base_exterior_color: color }, { base_exterior_color: color }, { trim }, {}]) {
-    if (extra.trim === undefined && 'trim' in extra) continue;
+  // White and the deal's trim first, then loosen.
+  for (const extra of [{ trim: g.trim, base_exterior_color: 'white' }, { base_exterior_color: 'white' }, { trim: g.trim }, {}]) {
+    if ('trim' in extra && !g.trim) continue;
     const r = await attempt(() => mc('/v2/search/car/active', { ...base, ...extra }, 3 * DAY));
-    if (!r.ok) { errors.push(r.error); break; }
+    if (!r.ok) { errors.push(r.error); if (r.error.status === 400) continue; break; }
     L = (r.data?.listings || []).filter((l) => (l.media?.photo_links || []).length >= 8);
     if (L.length) break;
   }
   let pick = null;
   if (L.length) {
-    const score = (l) => (l.media.photo_links.length >= 15 ? 15 : l.media.photo_links.length) + (WHITE.test(`${l.exterior_color || ''} ${l.base_exterior_color || ''}`) ? 30 : 0) + (trim && new RegExp(String(trim).split(/\s+/)[0], 'i').test(l.build?.trim || '') ? 8 : 0);
-    const l = L.sort((a, b) => score(b) - score(a))[0];
+    const words = g.trim.toLowerCase().split(/\s+/).filter((w) => w.length > 1);
+    const score = (l) => Math.min(15, l.media.photo_links.length) + (WHITE.test(`${l.exterior_color || ''} ${l.base_exterior_color || ''}`) ? 30 : 0)
+      + (words.length && words.every((w) => String(l.build?.trim || '').toLowerCase().includes(w)) ? 40 : words.some((w) => String(l.build?.trim || '').toLowerCase().includes(w)) ? 12 : 0);
+    // Keep the car we showed before while it's still for sale, so photos don't change for no reason.
+    const same = prev?.listing?.id && L.find((l) => l.id === prev.listing.id);
+    const l = same || L.sort((a, b) => score(b) - score(a))[0];
     pick = {
-      listing: { year: l.build?.year, make: l.build?.make, model: l.build?.model, trim: l.build?.trim, color: l.exterior_color || l.base_exterior_color || null, interior: l.interior_color || null, price: l.price || null, miles: l.miles || null, dealer: l.dealer?.name || null, city: l.dealer?.city || null, state: l.dealer?.state || null, url: l.vdp_url || null, source: 'MarketCheck' },
+      listing: { id: l.id, year: l.build?.year, make: l.build?.make, model: l.build?.model, trim: l.build?.trim, color: l.exterior_color || l.base_exterior_color || null, interior: l.interior_color || null, price: l.price || null, miles: l.miles || null, dealer: l.dealer?.name || null, city: l.dealer?.city || null, state: l.dealer?.state || null, url: l.vdp_url || null, source: 'MarketCheck' },
       urls: [...new Set(l.media.photo_links)].slice(0, 30),
     };
   } else {
-    // auto.dev fallback: a listing near the ZIP, then all its photos.
-    const a = await attempt(() => ad('/listings', { 'vehicle.make': make, 'vehicle.model': model, 'vehicle.year': year || undefined, zip: zip || undefined, distance: zip ? 250 : undefined, limit: 20 }, 3 * DAY));
-    const rows = a.ok ? (a.data?.data || []).filter((x) => (isUsed ? x.retailListing?.used : !x.retailListing?.used)) : [];
+    const a = await attempt(() => ad('/listings', { 'vehicle.make': g.make, 'vehicle.model': g.model, 'vehicle.year': g.year || undefined, zip: g.zip || undefined, distance: g.zip ? 250 : undefined, limit: 20 }, 3 * DAY));
+    const rows = a.ok ? (a.data?.data || []).filter((x) => (g.used ? x.retailListing?.used : !x.retailListing?.used)) : [];
     if (!a.ok) errors.push(a.error);
     rows.sort((x, y) => (WHITE.test(y.vehicle?.exteriorColor || '') ? 1 : 0) - (WHITE.test(x.vehicle?.exteriorColor || '') ? 1 : 0));
     for (const x of rows.slice(0, 3)) {
       const p = await attempt(() => ad(`/photos/${x.vin}`, null, 7 * DAY));
       const urls = p.ok ? (p.data?.data?.retail || p.data?.retail || []) : [];
       if (urls.length >= 8) {
-        pick = { listing: { year: x.vehicle?.year, make: x.vehicle?.make, model: x.vehicle?.model, trim: x.vehicle?.trim, color: x.vehicle?.exteriorColor || null, interior: x.vehicle?.interiorColor || null, price: x.retailListing?.price || null, miles: x.retailListing?.miles || null, dealer: x.retailListing?.dealer || null, city: x.retailListing?.city || null, state: x.retailListing?.state || null, url: x.retailListing?.vdp || null, source: 'auto.dev' }, urls: [...new Set(urls)].slice(0, 30) };
+        pick = { listing: { id: `ad-${String(x.vin).slice(-8)}`, year: x.vehicle?.year, make: x.vehicle?.make, model: x.vehicle?.model, trim: x.vehicle?.trim, color: x.vehicle?.exteriorColor || null, interior: x.vehicle?.interiorColor || null, price: x.retailListing?.price || null, miles: x.retailListing?.miles || null, dealer: x.retailListing?.dealer || null, city: x.retailListing?.city || null, state: x.retailListing?.state || null, url: x.retailListing?.vdp || null, source: 'auto.dev' }, urls: [...new Set(urls)].slice(0, 30) };
         break;
       }
     }
   }
-  if (!pick) return { listing: null, photos: [], sorted: false, errors };
-  const tags = await classifyCarPhotos(pick.urls).catch(() => null);
-  const photos = pick.urls.map((url, i) => ({ url, ...(tags?.get(i) || { cat: null, angle: null, ok: true }) }));
-  const out = { listing: pick.listing, photos, sorted: !!tags, errors };
-  // Sorted results keep for two weeks; unsorted ones retry sooner.
-  setCached(ck, out, tags ? 14 * DAY : 6 * 3600);
+  if (!pick) {
+    // Listing search failed: keep showing what we had rather than nothing.
+    if (prev?.listing) return prev;
+    return { listing: null, photos: [], spin: [], sorted: false, errors };
+  }
+  const tags = await photoTags(pick.listing.id, pick.urls);
+  const T = tags || guessTags(pick.urls.length);
+  const photos = pick.urls.map((u, i) => ({ url: signImg(u, WIDTHS.view), thumb: signImg(u, WIDTHS.thumb), full: signImg(u, WIDTHS.full), ...(T.get(i) || { cat: 'other', angle: null, ok: true }) }));
+  const out = finish(pick.listing, photos, !!tags, !tags, errors);
+  setCached(ck, out, tags ? 21 * DAY : 6 * 3600);
   return out;
+}
+function finish(listing, photos, sorted, guessed, errors = []) {
+  const spin = spinFrames(photos);
+  return { listing, photos, spin: spin.map((p) => photos.indexOf(p)), sorted, guessed, fetchedAt: Date.now(), errors };
+}
+
+// Overnight: get every saved car's photos ready so nobody waits in the app.
+export async function prewarmGalleries(store, { budgetOk = () => true } = {}) {
+  const done = [];
+  for (const p of Object.values(store?.profiles || {})) {
+    const zip = p.assumptions?.zip;
+    const cars = [{ ...(p.current || {}), mine: true }, ...(p.candidates || []).map((c) => ({ ...c, mine: false }))].filter((c) => c.make && c.model);
+    const seen = new Set();
+    for (const c of cars) {
+      const g = galleryParams({ ...c, zip });
+      const k = galleryKey(g);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      if (!budgetOk()) { done.push({ car: `${c.make} ${c.model}`, skipped: 'budget' }); continue; }
+      try {
+        const r = await gallery(g, { refresh: true });
+        done.push({ car: `${c.make} ${c.model}`, photos: r.photos?.length || 0, sorted: r.sorted, spin: r.spin?.length || 0 });
+      } catch (e) { done.push({ car: `${c.make} ${c.model}`, error: e.message }); }
+    }
+  }
+  return done;
 }

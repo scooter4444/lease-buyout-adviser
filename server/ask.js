@@ -149,45 +149,40 @@ ok is false when the image is mostly a window sticker, document, dealer sign or 
 Return JSON only: {"photos": [...]} with one entry per image.`;
 
 let photoDay = { day: '', count: 0 };
-export async function classifyCarPhotos(urls) {
+// inline: [{ mime_type, data } | null] in listing order. Returns Map(index -> { cat, angle, ok }) or null.
+export async function classifyCarPhotos(inline) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key || !urls.length) return null;
+  if (MOCK || !key || !inline?.length) return null;
   if (photoDay.day !== today()) photoDay = { day: today(), count: 0 };
   if (photoDay.count >= (Number(process.env.PHOTO_SORTS_PER_DAY) || 60)) return null;
+  const keep = inline.map((d, i) => (d ? { d, i } : null)).filter(Boolean);
+  if (keep.length < 4) return null;
   photoDay.count += 1;
-  const imgs = (await Promise.all(urls.map(async (u) => {
-    try {
-      const r = await fetch(u, { headers: { 'User-Agent': 'Mozilla/5.0 (LeaseBuyoutAdvisor)' }, signal: AbortSignal.timeout(12000) });
-      const type = (r.headers.get('content-type') || '').split(';')[0];
-      if (!r.ok || !/^image\/(jpeg|png|webp)$/.test(type)) return null;
-      const buf = Buffer.from(await r.arrayBuffer());
-      if (buf.length > 1.8e6) return null;
-      return { mime_type: type, data: buf.toString('base64') };
-    } catch { return null; }
-  })));
-  const keep = imgs.map((d, i) => (d ? { d, i } : null)).filter(Boolean);
-  if (!keep.length) return null;
-  const model = await pickModel(key);
-  const r = await fetch(`${BASE}/v1beta/models/${model}:generateContent`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [...keep.map((k) => ({ inline_data: k.d })), { text: PHOTO_PROMPT(keep.length) }] }],
-      generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 4000 },
-    }),
-    signal: AbortSignal.timeout(90000),
-  }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: { message: e.message } }) }));
-  const j = await r.json().catch(() => ({}));
-  console.log(`[gemini] sort-photos ${r.status} model=${model} n=${keep.length}`);
-  if (!r.ok) return null;
-  const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
-  let out;
-  try { out = JSON.parse(text.replace(/^```json\s*|```$/g, '')); } catch { return null; }
-  // Map Gemini's numbering (images that downloaded) back to the original list.
-  const tags = new Map();
-  for (const p of out.photos || []) {
-    const k = keep[Number(p.i)];
-    if (k) tags.set(k.i, { cat: String(p.cat || 'other'), angle: Number.isFinite(p.angle) ? ((Math.round(p.angle) % 360) + 360) % 360 : null, ok: p.ok !== false });
+  const first = await pickModel(key);
+  // On a busy/quota error, try the lighter model once.
+  const models = [first, first.includes('lite') ? null : first.replace(/-flash$/, '-flash-lite'), 'gemini-flash-lite-latest'].filter((m, i, a) => m && a.indexOf(m) === i);
+  for (const model of models) {
+    const r = await fetch(`${BASE}/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [...keep.map((k) => ({ inline_data: k.d })), { text: PHOTO_PROMPT(keep.length) }] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 4000 },
+      }),
+      signal: AbortSignal.timeout(90000),
+    }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: { message: e.message } }) }));
+    const j = await r.json().catch(() => ({}));
+    console.log(`[gemini] sort-photos ${r.status} model=${model} n=${keep.length}`);
+    if (!r.ok) { if (r.status === 429 || r.status === 503 || r.status === 404) continue; return null; }
+    const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+    let out;
+    try { out = JSON.parse(text.replace(/^```json\s*|```$/g, '')); } catch { return null; }
+    const tags = new Map();
+    for (const p of out.photos || []) {
+      const k = keep[Number(p.i)];
+      if (k) tags.set(k.i, { cat: String(p.cat || 'other'), angle: Number.isFinite(p.angle) ? ((Math.round(p.angle) % 360) + 360) % 360 : null, ok: p.ok !== false });
+    }
+    return tags.size >= keep.length / 2 ? tags : null;
   }
-  return tags;
+  return null;
 }

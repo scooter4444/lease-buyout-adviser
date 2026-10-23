@@ -9,6 +9,7 @@ import {
 import { usageThisMonth, cacheDir } from './cache.js';
 import { ask, askConfigured, readImage } from './ask.js';
 import { startRepricer } from './repricer.js';
+import { serveImg } from './images.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -61,6 +62,7 @@ app.get('/api/incentives', wrap((req) => incentives(req.query)));
 app.get('/api/deals', wrap((req) => dealSweep(req.query)));
 app.get('/api/safety', wrap((req) => nhtsaSafety(req.query)));
 app.get('/api/gallery', wrap((req) => gallery(req.query)));
+app.get('/api/img', (req, res) => serveImg(req, res));
 app.get('/api/photo', wrap((req) => photoFor(req.query)));
 app.post('/api/read-image', async (req, res) => {
   try { res.json(await readImage(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }

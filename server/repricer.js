@@ -1,7 +1,7 @@
 // Scheduled re-pricing: refresh each saved car's market value and its comparisons'
 // prices and offers, more often as the decide-by date gets close, within the API budget.
 import fs from 'node:fs';
-import { lookupVehicle, newCarMarket, incentives } from './providers.js';
+import { lookupVehicle, newCarMarket, incentives, prewarmGalleries } from './providers.js';
 import { usageThisMonth } from './cache.js';
 
 const DAY = 86400000;
@@ -105,14 +105,28 @@ export function startRepricer({ file, readStore, writeStore }) {
         latest.rev = (latest.rev || 0) + 1;
         writeStore(latest);
       }
+      await warm();
     } catch (e) {
       console.warn('[reprice] failed:', e.message);
     } finally { running = false; }
+  }
+  // Photos for every saved car, sorted ahead of time. Cached results cost nothing; listings are
+  // re-checked every few days and unsorted ones retried.
+  let warming = false;
+  async function warm() {
+    if (warming) return;
+    warming = true;
+    try {
+      const store = readStore();
+      const r = await prewarmGalleries(store, { budgetOk: () => (usageThisMonth().marketcheck || 0) < limit * 0.85 });
+      console.log('[photos] pre-load:', JSON.stringify(r));
+    } catch (e) { console.warn('[photos] pre-load failed:', e.message); } finally { warming = false; }
   }
   const pick = (p) => ({ current: p.current, lookup: p.lookup, candidates: p.candidates, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck });
 
   setInterval(() => tick(false), 30 * 60 * 1000).unref();
   setTimeout(() => tick(false), 60 * 1000).unref();
+  setTimeout(() => warm(), 2 * 60 * 1000).unref(); // after a deploy: fill in anything missing
   void file; void fs;
   return { runNow: () => tick(true) };
 }
