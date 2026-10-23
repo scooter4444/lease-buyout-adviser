@@ -28,7 +28,7 @@
   <main class="share" id="share" aria-live="polite"><p>Loading…</p></main>
   <script type="module">
     import { analyze, fmtYears } from './engine.js';
-    import { logoUrl } from './logos.js';
+    import { logoUrl, logoIsMono } from './logos.js';
     const $ = (s) => document.querySelector(s);
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const money = (x) => (Number.isFinite(x) ? `${x < 0 ? '−' : ''}$${Math.round(Math.abs(x)).toLocaleString('en-US')}` : '—');
@@ -71,7 +71,7 @@
           ${r.verdict.lines.length ? `<ul>${r.verdict.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
         </article>
         <h2>Every option, cheapest first</h2>
-        ${r.scenarios.slice(0, 8).map((s, i) => `<div class="opt ${i === 0 ? 'best' : ''}"><b>${(() => { const mk = s.kind === 'buyout' ? c.make : candidates.find((x) => x.id === s.candidateId)?.make; const u = logoUrl(mk); return u ? `<span class="logo inline"><img src="${u}" alt="${esc(mk)}" onerror="this.parentNode.remove()"></span>` : ''; })()}${esc(s.title)}</b><span class="m">${money(s.carPerMonth)}/mo</span><small>${s.monthlyPayment ? `payment ${money(s.monthlyPayment)}/mo${s.kind === 'lease' ? ` + ${money(Math.max(0, s.upfront))} due` : ''}, ` : ''}${money(s.perMonth)}/mo with gas, insurance and upkeep</small></div>`).join('')}
+        ${r.scenarios.slice(0, 8).map((s, i) => `<div class="opt ${i === 0 ? 'best' : ''}"><b>${(() => { const mk = s.kind === 'buyout' ? c.make : candidates.find((x) => x.id === s.candidateId)?.make; const u = logoUrl(mk); return u ? `<span class="logo inline ${logoIsMono(mk) ? 'mono' : ''}"><img src="${u}" alt="${esc(mk)}" onerror="this.parentNode.remove()"></span>` : ''; })()}${esc(s.title)}</b><span class="m">${money(s.carPerMonth)}/mo</span><small>${s.monthlyPayment ? `payment ${money(s.monthlyPayment)}/mo${s.kind === 'lease' ? ` + ${money(Math.max(0, s.upfront))} due` : ''}, ` : ''}${money(s.perMonth)}/mo with gas, insurance and upkeep</small></div>`).join('')}
         <p class="fine">“For the car” counts payments, money down, interest, taxes and fees, minus what the car is worth at the end, spread over ${fmtYears(r.horizonMonths)}. Gas, insurance and upkeep come on top, and the ranking counts them too. ${[c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')}, ${Number(c.currentMiles || 0).toLocaleString()} miles. ${p.repricedAt ? `Prices checked ${new Date(p.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : ''} Estimates, not offers.</p>`;
     } catch (e) {
       $('#share').innerHTML = `<div class="share-top">${logo}<span>Lease Buyout Advisor</span></div><div class="empty"><p>${esc(e.message)}</p></div>`;

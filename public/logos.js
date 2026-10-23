@@ -10,3 +10,7 @@ export function logoUrl(make) {
   const f = FILES[k] || FILES[ALIAS[k]];
   return f ? (LOCAL.has(f) ? `logos/${f}` : BASE + f) : null;
 }
+
+// Single-color dark marks: shown in white on dark backgrounds.
+const MONO = new Set(['acura', 'audi', 'genesis', 'infiniti', 'lincoln', 'lucid', 'maserati', 'mazda', 'nissan', 'polestar', 'rivian', 'toyota', 'volkswagen', 'jeep', 'ram']);
+export const logoIsMono = (make) => MONO.has(String(make || '').trim().toLowerCase());

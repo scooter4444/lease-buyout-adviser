@@ -548,16 +548,15 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { #toast, .btn, input, .idea { transition: none; } }
 
-/* Brand badges (logos from vehiclespecs/brand-logos, MIT) */
-.logo { display: inline-flex; align-items: center; justify-content: center; flex: none; box-sizing: border-box; width: 48px; height: 32px; padding: 4px 7px; background: #FFFFFF; border: 1px solid var(--hair); border-radius: 8px; vertical-align: middle; }
+/* Brand badges (logos from vehiclespecs/brand-logos, MIT; backgrounds removed) */
+.logo { display: inline-flex; align-items: center; justify-content: flex-start; flex: none; box-sizing: border-box; width: 48px; height: 28px; vertical-align: middle; }
 .logo img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
-.logo.inline { width: 40px; height: 26px; padding: 3px 6px; margin-right: 10px; vertical-align: -6px; }
-.mc-name .logo { margin-bottom: 8px; }
-.idea .logo { margin-bottom: 8px; }
-.v-head .logo { margin-bottom: 12px; }
+.logo.inline { width: 34px; height: 20px; margin-right: 8px; vertical-align: -4px; }
+.mc-name .logo, .idea .logo { margin-bottom: 8px; }
+.v-head .logo { margin-bottom: 12px; height: 30px; width: 64px; }
 .deal-list li { grid-template-columns: 48px minmax(0, 1fr) auto; }
 .deal-list li::before { content: none; }
-.deal-list .logo.deal { grid-column: 1; grid-row: 1 / span 2; align-self: start; }
+.deal-list .logo.deal { grid-column: 1; grid-row: 1 / span 2; align-self: start; margin-top: 2px; }
 .deal-list .dl-name { grid-column: 2; }
 .deal-list .dl-cost { grid-column: 3; grid-row: 1; }
 .deal-list .dl-terms { grid-column: 2; }
@@ -565,3 +564,5 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
   .deal-list .dl-terms { grid-column: 2 / -1; }
   .deal-list li > .btn { grid-column: 2 / -1; }
 }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .logo.mono img { filter: brightness(0) invert(0.92); } }
+:root[data-theme="dark"] .logo.mono img { filter: brightness(0) invert(0.92); }
