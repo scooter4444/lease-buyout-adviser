@@ -57,22 +57,21 @@
         if (w) ph = w.photo?.cutout ? w.photo : (w.market?.photo ? { url: w.market.photo } : w.photo);
       }
       const photo = ph?.url ? `<figure><img class="ph win-ph${ph.custom ? ' contain' : ''}${ph.blend ? ' blend' : ''}" src="${esc(ph.url)}" alt="${esc(best.vehicle)}" referrerpolicy="no-referrer"></figure>` : '';
-      const second = r.scenarios[1];
+      const article = (w) => (/^[aeiou]/i.test(String(w || '').trim()) ? 'an' : 'a');
+      const cur = [c.make, c.model].filter(Boolean).join(' ');
+      const title = (s) => s.kind === 'buyout' ? `Buy out the ${cur}` : s.kind === 'lease' ? `Lease ${article(s.vehicle)} ${s.vehicle}` : `Buy ${article(s.condition && s.condition !== 'new' ? s.condition : s.vehicle)} ${s.condition && s.condition !== 'new' ? `${s.condition} ` : ''}${s.vehicle}`;
+      const own = r.assumptions.costMode === 'ownership';
+      const unit = own ? 'a month to own' : 'a month in payments';
+      const pay = (s) => s.kind === 'lease' ? `${money(s.monthlyPayment)}/mo + ${money(Math.max(0, s.upfront))} due` : s.monthlyPayment ? `${money(s.monthlyPayment)}/mo${s.loanTerm ? ` for ${s.loanTerm} mo` : ''}` : '';
+      const brand = (s) => { const mk = s.kind === 'buyout' ? c.make : candidates.find((x) => x.id === s.candidateId)?.make; const u = logoUrl(mk); return u ? `<span class="logo inline ${logoIsMono(mk) ? 'mono' : ''}"><img src="${u}" alt="${esc(mk)}" onerror="this.parentNode.remove()"></span>` : ''; };
       $('#share').innerHTML = `
         <div class="share-top">${logo}<span>${esc(p.name)}</span></div>
-        <article class="sticker">
-          <div class="band"><span>${days != null && days >= 0 ? `Decide by ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${days} days` : 'Recommendation'}</span><span>${r.horizonMonths / 12} yrs</span></div>
-          <div class="verdict ${photo ? 'with-ph' : ''}"><h1>${esc(r.verdict.headline)}</h1>${photo}</div>
-          <div class="figures">
-            <div><b>${money(best.carPerMonth)}</b><span>a month for the car</span></div>
-            <div><b>${money(Number(c.buyoutPrice))}</b><span>buyout price</span></div>
-            <div><b>${second ? money(second.pvCost - best.pvCost) : '—'}</b><span>saved vs. next best</span></div>
-          </div>
-          ${r.verdict.lines.length ? `<ul>${r.verdict.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
-        </article>
-        <h2>Every option, cheapest first</h2>
-        ${r.scenarios.slice(0, 8).map((s, i) => `<div class="opt ${i === 0 ? 'best' : ''}"><b>${(() => { const mk = s.kind === 'buyout' ? c.make : candidates.find((x) => x.id === s.candidateId)?.make; const u = logoUrl(mk); return u ? `<span class="logo inline ${logoIsMono(mk) ? 'mono' : ''}"><img src="${u}" alt="${esc(mk)}" onerror="this.parentNode.remove()"></span>` : ''; })()}${esc(s.title)}</b><span class="m">${money(s.carPerMonth)}/mo</span><small>${s.monthlyPayment ? `payment ${money(s.monthlyPayment)}/mo${s.kind === 'lease' ? ` + ${money(Math.max(0, s.upfront))} due` : ''}, ` : ''}${money(s.perMonth)}/mo with gas, insurance and upkeep</small></div>`).join('')}
-        <p class="fine">“For the car” counts payments, money down, interest, taxes and fees, minus what the car is worth at the end, spread over ${fmtYears(r.horizonMonths)}. Gas, insurance and upkeep come on top, and the ranking counts them too. ${[c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')}, ${Number(c.currentMiles || 0).toLocaleString()} miles. ${p.repricedAt ? `Prices checked ${new Date(p.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : ''} Estimates, not offers.</p>`;
+        <article class="sticker options-view">
+          <div class="band"><span>${days != null && days >= 0 ? `Decide by ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${days} days` : 'Your options'}</span><span>${r.horizonMonths} months</span></div>
+          <div class="verdict ${p.photo?.url ? 'with-ph' : ''}"><div class="v-head"><h1>Your options</h1><p class="v-sub">${r.scenarios.length} ways forward from the ${esc(cur)}, ${unit}, lowest first.</p></div>${p.photo?.url ? `<figure><img class="ph win-ph${p.photo.custom ? ' contain' : ''}${p.photo.blend ? ' blend' : ''}" src="${esc(p.photo.url)}" alt="${esc(cur)}" referrerpolicy="no-referrer"></figure>` : ''}</div>
+          <ol class="opts">${r.scenarios.slice(0, 10).map((s) => `<li class="opt" style="grid-template-columns: minmax(0, 1fr) auto; padding: 12px 20px"><div class="o-t">${brand(s)}<b>${esc(title(s))}</b><small>${esc(pay(s))}</small></div><div class="o-m"><b>${money(s.monthly)}</b><small>a month</small></div></li>`).join('')}</ol>
+          <p class="fine">${own ? 'Cost of owning: payments, money down, interest, taxes and fees, minus what the car is worth at the end.' : `What you’d pay over ${r.horizonMonths} months: payments plus money due up front, taxes and fees. Nothing is guessed about resale.`} ${[c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')}, ${Number(c.currentMiles || 0).toLocaleString()} miles, buyout ${money(Number(c.buyoutPrice))}. ${p.repricedAt ? `Prices checked ${new Date(p.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : ''} Estimates, not offers.</p>
+        </article>`;
     } catch (e) {
       $('#share').innerHTML = `<div class="share-top">${logo}<span>Lease Buyout Advisor</span></div><div class="empty"><p>${esc(e.message)}</p></div>`;
     }

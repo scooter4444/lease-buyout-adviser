@@ -20,7 +20,7 @@ const blankProfile = (name = 'My car') => ({
   pricing: { plan: 'public', A: '5', Z: '7' },
   segment: '',
   photo: null,
-  assumptions: { zip: '', state: 'CO', horizonYears: '3', annualMiles: '12000', salesTaxPct: '', leaseTaxPct: '', gasPrice: '3.40', tradeInPct: '90', tradeInTaxCredit: '', discountRatePct: '4', docFee: '', titleFees: '' },
+  assumptions: { zip: '', state: 'CO', horizonYears: '3', annualMiles: '12000', salesTaxPct: '', leaseTaxPct: '', gasPrice: '3.40', tradeInPct: '90', tradeInTaxCredit: '', discountRatePct: '4', docFee: '', titleFees: '', costMode: 'payments', spreadUpfront: true, includeRunning: false },
   current: {
     vin: '', year: '', make: '', model: '', trim: '', mpg: '', marketValue: '', msrp: '',
     buyoutPrice: '', purchaseOptionFee: '', leaseEndDate: '', currentMiles: '', allowedMiles: '', excessMileRate: '', dispositionFee: '', wearCharges: '', monthlyPayment: '',
@@ -340,16 +340,16 @@ function summaryHTML(x, buyout) {
       ${c.status ? `<p class="status ${c.statusErr ? 'err' : ''}">${esc(c.status)}</p>` : '<p class="hint">Not priced yet.</p>'}
       <div class="mc-actions"><button type="button" class="btn primary small" data-price="${i}">Get prices &amp; offers</button>${remove}</div>`;
   }
-  const delta = buyout ? best.carPerMonth - buyout.carPerMonth : null;
+  const delta = buyout ? best.monthly - buyout.monthly : null;
   const eff = effectivePrice(c);
   const plan = azEligible(c) && planPct() ? `${state.pricing.plan}-Plan price` : 'Typical local price';
   return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}<span class="mc-rank">${x.rank}</span></div>
       <div class="mc-name">${logoHTML(c.make)}<b>${esc(carName(c))}</b><small>${esc(sub)}</small></div>
-      <div class="mc-cost"><b>${money(best.carPerMonth)}</b><small>a month for the car, ${best.kind === 'lease' ? 'leased' : 'bought'}</small></div></header>
+      <div class="mc-cost"><b>${money(best.monthly)}</b><small>${esc(unitLabel())}, ${best.kind === 'lease' ? 'leased' : 'bought'}</small></div></header>
     ${delta != null ? `<p class="mc-vs ${delta > 0 ? 'neg' : 'pos'}">${delta > 0 ? `${money(delta)}/mo more` : `${money(-delta)}/mo less`} than buying out your ${esc(curLabel())}</p>` : ''}
     <dl class="mc-grid">
-      ${buy ? `<div><dt>Buy</dt><dd>${money(buy.carPerMonth)}<small>/mo</small></dd><p>${c.buy.payCash ? 'paid in cash' : `payment ${esc(payText(buy))}`}</p></div>` : ''}
-      ${lease ? `<div><dt>Lease${lease.estimated ? ' (estimate)' : ''}</dt><dd>${money(lease.carPerMonth)}<small>/mo</small></dd><p>${esc(payText(lease))}${lease.estimated ? ', no factory deal found' : ''}</p></div>` : ''}
+      ${buy ? `<div><dt>Buy</dt><dd>${money(buy.monthly)}<small>/mo</small></dd><p>${c.buy.payCash ? 'paid in cash' : `payment ${esc(payText(buy))}`}</p></div>` : ''}
+      ${lease ? `<div><dt>Lease${lease.estimated ? ' (estimate)' : ''}</dt><dd>${money(lease.monthly)}<small>/mo</small></dd><p>${esc(payText(lease))}${lease.estimated ? ', no factory deal found' : ''}</p></div>` : ''}
       <div><dt>${plan}</dt><dd>${money(eff)}</dd><p>MSRP ${money(Number(c.msrp) || null)}</p></div>
       <div><dt>Fuel economy</dt><dd>${c.mpg ? `${esc(c.mpg)}<small> mpg</small>` : '—'}</dd><p>${c.market?.count ? `${c.market.count.toLocaleString()} for sale near you` : '&nbsp;'}</p></div>
     </dl>
@@ -362,8 +362,8 @@ function compareChart(priced, buyout) {
   if (!priced.length) return '';
   const W = Math.round(Math.min(760, Math.max(300, ($('#modelCompare').clientWidth || 600)))), rowH = 40, left = W < 480 ? 108 : 150, right = 14, top = 22;
   const H = top + priced.length * rowH + 22;
-  const vals = priced.flatMap((x) => [x.buy?.carPerMonth, x.lease?.carPerMonth]).filter(Number.isFinite);
-  if (buyout) vals.push(buyout.carPerMonth);
+  const vals = priced.flatMap((x) => [x.buy?.monthly, x.lease?.monthly]).filter(Number.isFinite);
+  if (buyout) vals.push(buyout.monthly);
   const lo = Math.min(0, ...vals), hi = Math.max(...vals) * 1.06;
   const xs = (v) => left + ((v - lo) / (hi - lo || 1)) * (W - left - right);
   const ticks = niceTicks(lo, hi, 4);
@@ -373,12 +373,12 @@ function compareChart(priced, buyout) {
   priced.forEach((x, k) => {
     const y = top + k * rowH;
     svg += `<text x="${left - 8}" y="${y + 20}" text-anchor="end">${esc(trunc(carName(x.c), W < 480 ? 15 : 22))}</text>`;
-    if (x.buy) svg += `<rect x="${xs(lo)}" y="${y + 4}" width="${Math.max(0, xs(x.buy.carPerMonth) - xs(lo))}" height="14" rx="2" fill="var(--s1)"><title>Buy: ${money(x.buy.carPerMonth)}/mo</title></rect>`;
-    if (x.lease) svg += `<rect x="${xs(lo)}" y="${y + 20}" width="${Math.max(0, xs(x.lease.carPerMonth) - xs(lo))}" height="14" rx="2" fill="var(--s3)"><title>Lease: ${money(x.lease.carPerMonth)}/mo</title></rect>`;
+    if (x.buy) svg += `<rect x="${xs(lo)}" y="${y + 4}" width="${Math.max(0, xs(x.buy.monthly) - xs(lo))}" height="14" rx="2" fill="var(--s1)"><title>Buy: ${money(x.buy.monthly)}/mo</title></rect>`;
+    if (x.lease) svg += `<rect x="${xs(lo)}" y="${y + 20}" width="${Math.max(0, xs(x.lease.monthly) - xs(lo))}" height="14" rx="2" fill="var(--s3)"><title>Lease: ${money(x.lease.monthly)}/mo</title></rect>`;
   });
   if (buyout) {
-    const bx = xs(buyout.carPerMonth);
-    svg += `<line x1="${bx}" x2="${bx}" y1="${top - 6}" y2="${H - 18}" stroke="var(--go)" stroke-width="2.5"/><text x="${bx}" y="${top - 10}" text-anchor="${bx > W - 120 ? 'end' : 'middle'}" style="fill:var(--go);font-weight:650">Buy out ${esc(trunc(curLabel(), 16))}: ${money(buyout.carPerMonth)}</text>`;
+    const bx = xs(buyout.monthly);
+    svg += `<line x1="${bx}" x2="${bx}" y1="${top - 6}" y2="${H - 18}" stroke="var(--go)" stroke-width="2.5"/><text x="${bx}" y="${top - 10}" text-anchor="${bx > W - 120 ? 'end' : 'middle'}" style="fill:var(--go);font-weight:650">Buy out ${esc(trunc(curLabel(), 16))}: ${money(buyout.monthly)}</text>`;
   }
   svg += '</svg>';
   return `<div class="compare-chart">${svg}<div class="legend"><span><i style="background:var(--s1)"></i>Buy</span><span><i style="background:var(--s3)"></i>Lease</span><span><i class="line" style="background:var(--go)"></i>Buying out your current car</span></div></div>`;
@@ -395,7 +395,7 @@ function renderModels() {
   const { rows, buyout, priced } = modelRows();
   const lede = $('#modelsLede');
   lede.textContent = buyout
-    ? `What each car costs a month over ${fmtYears(lastAnalysis.horizonMonths)}: payments, money down, taxes and fees, minus what it’s worth at the end. Gas, insurance and upkeep are left out here (they’re in each card and the ranking). The green line is buying out your ${curLabel()} at ${money(buyout.carPerMonth)}/mo.`
+    ? `${basisLine(lastAnalysis.horizonMonths)} The green line is buying out your ${curLabel()} at ${money(buyout.monthly)}/mo.`
     : 'Every model is priced as a purchase and a lease with local dealer prices and current manufacturer offers, then ranked by what it really costs per month.';
   $('#modelCompare').innerHTML = (rows.length ? compareChart(priced, buyout) : `<div class="empty small"><p>No models yet. Tap <b>Add comparable models</b> to fill this with the cars that compete with your ${esc(curLabel())}.</p></div>`)
     + rows.map((x) => `<article class="mc ${x.rank === 1 ? 'first' : ''}" data-card="${x.i}">
@@ -486,10 +486,10 @@ function renderResults() {
   const scenarioRows = r.scenarios.map((s, i) => {
     const cats = CAT_ORDER.filter((c) => s.breakdown[c]).map((c) => `<tr><td>${esc(CAT_LABEL[c] || c)}</td><td>${money(s.breakdown[c])}</td></tr>`).join('');
     const tv = Math.abs(s.timeValue) >= 1 ? `<tr><td>Time value of money (${r.assumptions.discountRatePct}%)</td><td>${money(s.timeValue)}</td></tr>` : '';
-    return `<li class="${i === 0 ? 'best' : ''}">
-      <span class="t">${esc(s.title)}${s.estimated ? ' <span class="tag">estimated payment</span>' : ''}</span>
-      <span class="m"><b>${money(s.carPerMonth)}</b><small>a month for the car</small></span>
-      <span class="d">${payText(s) ? `<span>${esc(payText(s))}</span>` : ''}<span>+ ${money(s.runningPerMonth)}/mo gas, insurance, upkeep</span><span>${money(s.perMonth)}/mo all in</span>${s.upfront < 0 ? `<span>${money(-s.upfront)} back at start</span>` : ''}</span>
+    return `<li>
+      <span class="t">${logoHTML(s.kind === 'buyout' ? state.current.make : winnerMake(s), 'inline')}${esc(optTitle(s))}${s.estimated ? ' <span class="tag">estimated payment</span>' : ''}</span>
+      <span class="m"><b>${money(s.monthly)}</b><small>${esc(unitLabel())}</small></span>
+      <span class="d">${payText(s) ? `<span>${esc(payText(s))}</span>` : ''}<span>${money(s.paidOverPeriod)} paid over ${H} months</span>${runningOn() ? '' : `<span>+ about ${money(s.runningPerMonth)}/mo gas, insurance, upkeep</span>`}${s.upfront < 0 ? `<span>${money(-s.upfront)} back at start</span>` : ''}</span>
       <details><summary>Where the money goes</summary>
         <table>${cats}${tv}<tr><td><b>Total</b></td><td><b>${money(s.pvCost)}</b></td></tr></table>
         <ul class="notes">${s.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
@@ -498,22 +498,30 @@ function renderResults() {
   }).join('');
 
   const recalls = state.lookup?.recalls || [];
+  const curPh = state.photo?.url ? state.photo : null;
+  const optRows = r.scenarios.slice(0, 6).map((s) => {
+    const ph = winnerPhoto(s);
+    const d = r.scenarios.find((x) => x.kind === 'buyout');
+    const diff = d && s.kind !== 'buyout' ? s.monthly - d.monthly : null;
+    return `<li class="opt">
+      <div class="o-pic">${ph ? imgHTML(ph.url, s.vehicle, phCls(ph)) : '<span class="ph ph-empty"></span>'}</div>
+      <div class="o-t">${logoHTML(s.kind === 'buyout' ? state.current.make : winnerMake(s), 'inline')}<b>${esc(optTitle(s))}</b><small>${esc(payText(s) || '')}${s.estimated ? ', estimated' : ''}</small></div>
+      <div class="o-m"><b>${money(s.monthly)}</b><small>${diff == null ? 'a month' : `${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))} vs. buying out`}</small></div>
+    </li>`;
+  }).join('');
   el.innerHTML = `
-    <article class="sticker ${stickerFresh ? 'fresh' : ''}">
-      <div class="band"><span>${deadlineShort(state) ? esc(deadlineShort(state)) : 'Recommendation'}</span><span>${H / 12} yrs, ${Math.round(Number(r.assumptions.annualMiles) / 1000)}k mi/yr</span></div>
-      <div class="verdict ${winnerPhoto(best) ? 'with-ph' : ''}"><div class="v-head">${logoHTML(winnerMake(best))}<h1>${esc(v.headline)}</h1></div>${winnerPhoto(best) ? `<figure>${imgHTML(winnerPhoto(best).url, best.vehicle, phCls(winnerPhoto(best), 'win-ph'))}${winnerPhoto(best).exact ? '' : '<figcaption>Similar car, photo from a local listing</figcaption>'}</figure>` : ''}</div>
-      <div class="figures">
-        <div><b>${money(best.carPerMonth)}</b><span>a month for the car</span></div>
-        <div><b>${payText(best) ? esc(payText(best).replace(/ for \d+ mo$/, '')) : 'Paid off'}</b><span>${best.kind === 'lease' ? 'payment + due at signing' : best.monthlyPayment ? 'loan payment' : 'no payment'}</span></div>
-        <div><b>${r.scenarios[1] ? money(r.scenarios[1].pvCost - best.pvCost) : '—'}</b><span>saved vs. next best</span></div>
-      </div>
-      ${v.lines.length ? `<ul>${v.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
-      <p class="fine">“For the car” is what you’d hold up against a lease payment: payments, money down, interest, taxes and fees, minus what the car is worth when you’re done, spread over ${fmtYears(H)}. Gas, insurance and upkeep (about ${money(best.runningPerMonth)}/mo here) come on top; the ranking counts them too.</p>
+    <article class="sticker options-view ${stickerFresh ? 'fresh' : ''}">
+      <div class="band"><span>${deadlineShort(state) ? esc(deadlineShort(state)) : 'Your options'}</span><span>${periodText(H)}, ${Math.round(Number(r.assumptions.annualMiles) / 1000)}k mi a year</span></div>
+      <div class="verdict ${curPh ? 'with-ph' : ''}"><div class="v-head">${logoHTML(state.current.make)}<h1>Your options</h1><p class="v-sub">${r.scenarios.length} ways forward from your ${esc(curLabel())}, ${esc(unitLabel())}, lowest first.</p></div>${curPh ? `<figure>${imgHTML(curPh.url, curLabel(), phCls(curPh, 'win-ph'))}</figure>` : ''}</div>
+      <ol class="opts">${optRows}</ol>
+      ${r.scenarios.length > 6 ? `<p class="opts-more"><a href="#all-options">See all ${r.scenarios.length} options</a></p>` : ''}
+      <p class="fine">${esc(basisLine(H))}</p>
     </article>
 
     ${repriceBannerHTML()}
     <div class="verdict-actions">
-      <button type="button" class="btn small" data-act="share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6h14v-6"></path></svg>Share this decision</button>
+      <button type="button" class="btn small" data-act="share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6h14v-6"></path></svg>Share these options</button>
+      <button type="button" class="btn small ghost" data-act="settings">How costs are counted</button>
       <button type="button" class="btn small ghost" data-act="reprice">Re-check prices now</button>
     </div>
     ${r.warnings.length ? `<div class="warns">${r.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}</div>` : ''}
@@ -525,7 +533,7 @@ function renderResults() {
       <div class="equity">${equityCells.join('')}</div>
     </section>
 
-    <section class="panel"><h2>Every option, cheapest first</h2><ol class="rank">${scenarioRows}</ol></section>
+    <section class="panel" id="all-options"><h2>All options, lowest monthly first</h2><p class="sub">${esc(basisLine(H))}</p><ol class="rank">${scenarioRows}</ol></section>
 
     <section class="panel"><h2>Where the money goes</h2>
       <p class="sub">Total cost over ${fmtYears(H)}. Bars left of zero are money coming back to you.</p>
@@ -547,9 +555,9 @@ function repriceBannerHTML() {
   const n = state.repriceNotice;
   const when = state.repricedAt ? new Date(state.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null;
   if (n && n.at && n.before && n.after && n.before !== n.after) {
-    return `<div class="notice changed" role="status"><b>The answer changed.</b> Prices re-checked ${esc(when || '')}: it was “${esc(n.before)}”, now “${esc(n.after)}”. <button type="button" class="linkish" data-act="dismiss">Got it</button></div>`;
+    return `<div class="notice changed" role="status"><b>The lowest-cost option changed.</b> Prices re-checked ${esc(when || '')}: it was “${esc(n.before)}”, now “${esc(n.after)}”. <button type="button" class="linkish" data-act="dismiss">Got it</button></div>`;
   }
-  return when ? `<p class="checked">Prices and offers re-checked ${esc(when)}${n?.after ? `, still “${esc(n.after)}”` : ''}. They refresh automatically, more often as the deadline gets close.</p>` : '';
+  return when ? `<p class="checked">Prices and offers re-checked ${esc(when)}${n?.after ? `; the lowest is still “${esc(n.after)}”` : ''}. They refresh automatically, more often as the deadline gets close.</p>` : '';
 }
 
 const MILESTONES = [
@@ -854,7 +862,7 @@ function profileVerdict(p) {
     const r = analyze(analysisInput(p.candidates, {}, p));
     const best = r.scenarios[0];
     if (!best) return null;
-    return { short: verdictShort(best), perMonth: best.perMonth, carPerMonth: best.carPerMonth, compared: r.scenarios.length - 1 };
+    return { short: verdictShort(best), monthly: best.monthly, compared: r.scenarios.length, mode: r.assumptions.costMode };
   } catch { return null; }
 }
 
@@ -871,7 +879,7 @@ function renderGarage() {
           <small>${esc(sub || 'No car details yet')}</small>
           ${deadlineText(p) ? `<small class="g-deadline">${esc(deadlineText(p))}</small>` : ''}
         </div>
-        ${v ? `<div class="g-verdict"><span class="tag offer-tag">${esc(v.short)}</span><small>${money(v.carPerMonth)}/mo for the car</small></div>` : ''}
+        ${v ? `<div class="g-verdict"><small>${v.compared} options</small><small>from ${money(v.monthly)}/mo</small></div>` : ''}
       </button>
       <div class="g-actions"><button type="button" class="btn ghost small" data-rename="${id}">Rename</button>${Object.keys(store.profiles).length > 1 ? `<button type="button" class="btn ghost small" data-delete="${id}">Delete</button>` : ''}</div>
     </article>`;
@@ -1198,16 +1206,16 @@ function renderDeals() {
   const buyout = lastAnalysis?.scenarios?.find((s) => s.kind === 'buyout');
   const rows = deals.offers.filter((o) => o.make && o.model && (!suvOnly || isSuv(o)))
     .map((o) => ({ o, s: dealScenario(o) })).filter((x) => x.s)
-    .sort((a, b) => a.s.carPerMonth - b.s.carPerMonth);
+    .sort((a, b) => a.s.monthly - b.s.monthly);
   if (!rows.length) { el.innerHTML = `<p class="hint">No ${suvOnly ? 'SUV ' : ''}lease deals found within 15 miles.</p>`; return; }
   const have = new Set(state.candidates.map((c) => `${c.make}|${c.model}`.toLowerCase()));
-  el.innerHTML = `<p class="hint">${rows.length} deals from ${new Set(rows.map((x) => x.o.make)).size} makes, cheapest real cost first. “For the car” spreads the money due at signing over the lease${buyout ? `; buying out your ${esc(curLabel())} is ${money(buyout.carPerMonth)}/mo` : ''}.</p>
+  el.innerHTML = `<p class="hint">${rows.length} deals from ${new Set(rows.map((x) => x.o.make)).size} makes, lowest monthly first, counted the same way as everything else (${esc(unitLabel())})${buyout ? `. Buying out your ${esc(curLabel())}: ${money(buyout.monthly)}/mo` : ''}.</p>
     <ol class="deal-list">${rows.slice(0, dealsShown).map(({ o, s }, i) => {
-      const d = buyout ? s.carPerMonth - buyout.carPerMonth : null;
+      const d = buyout ? s.monthly - buyout.monthly : null;
       const flags = dealFlags(o);
       const added = have.has(`${o.make}|${o.model}`.toLowerCase());
       return `<li>${logoHTML(o.make, 'deal')}<div class="dl-name"><b>${esc([o.year, o.make, o.model].filter(Boolean).join(' '))}</b><small>${esc([o.trim, o.msrp ? `MSRP ${money(o.msrp)}` : ''].filter(Boolean).join(', '))}</small></div>
-        <div class="dl-cost"><b>${money(s.carPerMonth)}</b><small>/mo for the car</small></div>
+        <div class="dl-cost"><b>${money(s.monthly)}</b><small>a month</small></div>
         <div class="dl-terms"><span>${money(o.monthly)}/mo + ${money(o.dueAtSigning || 0)} due</span><span>${o.term || 36} months, ${(dealMiles(o) / 1000).toFixed(dealMiles(o) % 1000 ? 1 : 0)}k mi/yr</span>${d != null ? `<span class="${d > 0 ? 'neg' : 'pos'}">${d > 0 ? `${money(d)}/mo more` : `${money(-d)}/mo less`} than buying out</span>` : ''}${flags.map((f) => `<span class="tag">${esc(f)}</span>`).join('')}</div>
         <button type="button" class="btn small ${added ? 'ghost' : ''}" data-deal="${deals.offers.indexOf(o)}" ${added ? 'disabled' : ''}>${added ? 'In compare' : 'Add to compare'}</button></li>`;
     }).join('')}</ol>
@@ -1223,6 +1231,63 @@ function renderDeals() {
 }
 
 // What the dealer would quote, in words: "$423/mo, $4,919 due" or "$811/mo for 60 mo".
+// ---------- How costs are counted (Settings) ----------
+const costMode = () => (state.assumptions.costMode === 'ownership' ? 'ownership' : 'payments');
+const spreadOn = () => !(state.assumptions.spreadUpfront === false || state.assumptions.spreadUpfront === 'false');
+const runningOn = () => state.assumptions.includeRunning === true || state.assumptions.includeRunning === 'true';
+function unitLabel() {
+  const extra = runningOn() ? ', with gas, insurance and upkeep' : '';
+  return costMode() === 'ownership' ? `a month to own${extra}` : `a month in payments${extra}`;
+}
+function periodText(H) { return `${H} months`; }
+function basisLine(H) {
+  if (costMode() === 'ownership') {
+    return `Cost of owning over ${periodText(H)}: payments, money down, interest, taxes and fees, minus what the car is worth at the end${runningOn() ? ', plus gas, insurance and upkeep' : ''}. Change this in Settings.`;
+  }
+  return `What you’d pay over ${periodText(H)}: monthly payments${spreadOn() ? ', plus money due up front spread across the months' : ''}, taxes and fees${runningOn() ? ', gas, insurance and upkeep' : ''}. Nothing is guessed about resale. Change this in Settings.`;
+}
+const article = (w) => (/^[aeiou]/i.test(String(w || '').trim()) ? 'an' : 'a');
+function optTitle(s) {
+  const name = s.vehicle || '';
+  if (s.kind === 'buyout') return `Buy out your ${curLabel()}`;
+  if (s.kind === 'lease') return `Lease ${article(name)} ${name}`;
+  const used = s.condition && s.condition !== 'new' ? `${s.condition} ` : '';
+  return `Buy ${article(used || name)} ${used}${name}`;
+}
+function openSettings() {
+  const a = state.assumptions;
+  for (const r of $$('input[name="costMode"]')) r.checked = r.value === costMode();
+  $('#setPeriod').value = String(Math.min(7, Math.max(1, Math.round(Number(a.horizonYears) || 3))));
+  $('#setSpread').checked = spreadOn();
+  $('#setRunning').checked = runningOn();
+  $('#setMiles').value = a.annualMiles || '';
+  $('#setRate').value = a.discountRatePct ?? '';
+  settingsHints();
+  $('#settings').showModal();
+}
+function settingsHints() {
+  const own = costMode() === 'ownership';
+  $('#modeHint').textContent = own
+    ? 'Everything it costs to have the car for the period, minus what it should be worth when the period ends. Uses projected resale values.'
+    : 'Just what you’d pay over the period. No projected resale value, and a loan that runs longer than the period only counts the payments inside it.';
+  $('#setRateRow').hidden = !own;
+}
+function onSettingsChange() {
+  const a = state.assumptions;
+  a.costMode = $$('input[name="costMode"]').find((r) => r.checked)?.value || 'payments';
+  a.horizonYears = $('#setPeriod').value;
+  a.spreadUpfront = $('#setSpread').checked;
+  a.includeRunning = $('#setRunning').checked;
+  if ($('#setMiles').value) a.annualMiles = $('#setMiles').value.replace(/[^\d]/g, '');
+  if ($('#setRate').value !== '') a.discountRatePct = $('#setRate').value;
+  for (const k of ['horizonYears', 'annualMiles', 'discountRatePct']) {
+    const el = document.getElementById(`f-assumptions-${k}`);
+    if (el) el.value = a[k];
+  }
+  settingsHints();
+  renderResults(); renderModels(); persist();
+}
+
 function winnerMake(s) {
   if (!s) return '';
   if (s.kind === 'buyout') return state.current.make;
@@ -1508,7 +1573,7 @@ function askContext() {
     recalls: (state.lookup?.recalls || []).map((x) => ({ title: x.title, status: x.status })).slice(0, 8),
     equity: r ? Object.fromEntries(Object.entries(r.equity).map(([k, v]) => [k, typeof v === 'number' ? round(v) : v])) : null,
     verdict: r?.verdict || null,
-    optionsCheapestFirst: (r?.scenarios || []).map((x) => ({ option: x.title, carCostPerMonth: round(x.carPerMonth), runningCostsPerMonth: round(x.runningPerMonth), allInPerMonth: round(x.perMonth), totalOverHorizon: round(x.pvCost), payment: round(x.monthlyPayment), upfront: round(x.upfront), worthAtEnd: round(x.valueAtEnd), estimatedPayment: !!x.estimated, notes: x.notes })),
+    howCounted: basisLine(r?.horizonMonths || 36), optionsLowestMonthlyFirst: (r?.scenarios || []).map((x) => ({ option: optTitle(x), monthlyAsCounted: round(x.monthly), paidOverPeriod: round(x.paidOverPeriod), ownershipCostPerMonth: round(x.carPerMonth), runningCostsPerMonth: round(x.runningPerMonth), allInPerMonth: round(x.perMonth), totalOverHorizon: round(x.pvCost), payment: round(x.monthlyPayment), upfront: round(x.upfront), worthAtEnd: round(x.valueAtEnd), estimatedPayment: !!x.estimated, notes: x.notes })),
     newCarsCompared: state.candidates.map((x) => ({ name: [x.year, x.make, x.model, x.trim].filter(Boolean).join(' '), whySuggested: x.reason || null, priceUsed: effectivePrice(x), streetPrice: Number(x.sellingPrice) || null, msrp: Number(x.msrp) || null, mpg: x.mpg || null, forSaleNearby: x.market?.count ?? null, offers: (x.offers || []).slice(0, 8).map((o) => ({ type: o.type, monthly: o.monthly, apr: o.apr, term: o.term, dueAtSigning: o.dueAtSigning, cashBack: o.cashback, forWho: o.group, ends: o.validThrough })) })),
     assumptionsNote: 'All-in monthly = payments, interest, taxes, fees, registration, insurance, fuel and maintenance, minus resale value at the end, spread over the horizon, discounted at 4%/yr.',
   };
@@ -1625,10 +1690,13 @@ function wire() {
     const act = b.dataset.act;
     if (act === 'ics') downloadReminders();
     else if (act === 'share') shareDecision();
+    else if (act === 'settings') openSettings();
     else if (act === 'reprice') repriceNow();
     else if (act === 'dismiss') { state.repriceNotice = { ...state.repriceNotice, before: state.repriceNotice?.after }; persist(); renderResults(); }
   });
   $('#garageBtn').addEventListener('click', openGarage);
+  $('#settingsBtn').addEventListener('click', openSettings);
+  $('#settings').addEventListener('change', onSettingsChange);
   $('#garageList').addEventListener('click', onGarageClick);
   $('#startAdd').addEventListener('click', startAdd);
   $('#step1Go').addEventListener('click', step1);

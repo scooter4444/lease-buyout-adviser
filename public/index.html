@@ -21,10 +21,12 @@
     </div>
     <button type="button" class="switcher" id="garageBtn" aria-haspopup="dialog"><span id="garageLabel">Your cars</span>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    <button type="button" class="icon-btn" id="settingsBtn" aria-haspopup="dialog" aria-label="How costs are counted">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg></button>
   </header>
 
   <nav class="tabs" role="tablist" aria-label="Sections">
-    <button type="button" role="tab" data-tab="verdict" class="narrow-only">Verdict</button>
+    <button type="button" role="tab" data-tab="verdict" class="narrow-only">Options</button>
     <button type="button" role="tab" data-tab="car">Your car</button>
     <button type="button" role="tab" data-tab="models">Compare<span class="wide-only"> models</span></button>
   </nav>
@@ -138,6 +140,30 @@
     <p class="sheet-sub">Each leased car gets its own decision and its own deadline.</p>
     <div id="garageList"></div>
     <button type="button" class="btn primary block" id="startAdd">Add a car</button>
+  </dialog>
+
+  <dialog class="sheet" id="settings" aria-labelledby="setTitle">
+    <div class="sheet-head"><h2 id="setTitle">How costs are counted</h2><button type="button" class="icon-btn" data-close aria-label="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></div>
+    <p class="sheet-sub">These apply to this car’s comparison and are saved with it.</p>
+    <div class="set-row">
+      <span class="set-label">Monthly figure</span>
+      <div class="seg-ctl" role="radiogroup" aria-label="Monthly figure">
+        <label><input type="radio" name="costMode" value="payments"><span>Payments</span></label>
+        <label><input type="radio" name="costMode" value="ownership"><span>Cost of owning</span></label>
+      </div>
+      <p class="hint" id="modeHint"></p>
+    </div>
+    <label class="field set-row"><span>Period</span>
+      <select id="setPeriod">
+        <option value="1">12 months</option><option value="2">24 months</option><option value="3">36 months</option><option value="4">48 months</option><option value="5">60 months</option><option value="6">72 months</option><option value="7">84 months</option>
+      </select>
+      <small>Every option is counted over the same stretch of time.</small>
+    </label>
+    <label class="field check set-row"><input type="checkbox" id="setSpread"><span>Spread money paid up front over the period<small>Down payment, due at signing, and taxes and fees paid at the start.</small></span></label>
+    <label class="field check set-row"><input type="checkbox" id="setRunning"><span>Include gas, insurance and upkeep<small>Off: just what you pay for the car itself.</small></span></label>
+    <label class="field set-row"><span>Miles you drive a year</span><span class="input has-suf"><input id="setMiles" inputmode="numeric"><span class="suf">mi</span></span></label>
+    <label class="field set-row" id="setRateRow"><span>Interest your money could earn</span><span class="input has-suf"><input id="setRate" inputmode="decimal"><span class="suf">%</span></span><small>Used only for Cost of owning, to weigh money paid now against money paid later.</small></label>
+    <button type="button" class="btn primary block" data-close>Done</button>
   </dialog>
 
   <!-- Add a car: three steps -->

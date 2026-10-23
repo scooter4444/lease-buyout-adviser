@@ -66,10 +66,11 @@ test('financed and cash buyout differ only by interest (no discounting)', () => 
 });
 
 test('big positive equity makes buyout win; huge negative equity makes it lose', () => {
-  const good = analyze(base({ current: { buyoutPrice: 18000 } }));
+  const own = { costMode: 'ownership' };
+  const good = analyze(base({ current: { buyoutPrice: 18000 }, assumptions: own }));
   assert.equal(good.scenarios[0].kind, 'buyout');
   assert.equal(good.verdict.headline, 'Buy out your lease');
-  const bad = analyze(base({ current: { buyoutPrice: 40000 } }));
+  const bad = analyze(base({ current: { buyoutPrice: 40000 }, assumptions: own }));
   assert.notEqual(bad.scenarios[0].kind, 'buyout');
 });
 
@@ -152,4 +153,27 @@ test('car cost plus gas/insurance/upkeep adds up to all-in, and a real lease off
   assert.ok(Math.abs(lease.monthlyPayment - 399 * 1.06) < 0.01);
   // 36 payments of $423 + $4,919 down ≈ $560/mo before the time value of money
   assert.ok(lease.carPerMonth > 520 && lease.carPerMonth < 600, `car ${lease.carPerMonth}`);
+});
+
+test('payments mode counts only what you pay in the period: no resale, no leftover loan balance', () => {
+  const input = (mode, extra = {}) => ({
+    current: { make: 'Ford', model: 'Edge', year: '2024', buyoutPrice: '24481', marketValue: '23935', currentMiles: '25000', mpg: '23' },
+    assumptions: { state: 'MI', horizonYears: '3', annualMiles: '10000', salesTaxPct: '6', leaseTaxPct: '6', costMode: mode, ...extra },
+    candidates: [{ id: 'm', make: 'Nissan', model: 'Murano', sellingPrice: '46289', msrp: '50850', mpg: '24', buy: { enabled: true, apr: '0', termMonths: '60' }, lease: { enabled: true, monthly: '399', termMonths: '36', dueAtSigning: '4919', annualMileage: '10000' } }],
+  });
+  const r = analyze(input('payments'));
+  const lease = r.scenarios.find((s) => s.kind === 'lease');
+  // 36 taxed payments of $399 + $4,919 due (+ small fees), spread over 36 months: about $560
+  assert.ok(lease.monthly > 540 && lease.monthly < 600, `lease ${lease.monthly}`);
+  const buy = r.scenarios.find((s) => s.kind === 'buy');
+  // 0% for 60 months: 36 of 60 payments fall in the period, nothing for resale
+  assert.ok(Math.abs(buy.monthly - buy.paymentsPerMonth) < 1e-9);
+  assert.ok(buy.monthly > buy.monthlyPayment * 0.95, `buy ${buy.monthly} vs payment ${buy.monthlyPayment}`);
+  for (let i = 1; i < r.scenarios.length; i++) assert.ok(r.scenarios[i - 1].monthly <= r.scenarios[i].monthly);
+  // Not spreading the money due up front leaves just the recurring payments.
+  const r2 = analyze(input('payments', { spreadUpfront: false }));
+  assert.ok(r2.scenarios.find((s) => s.kind === 'lease').monthly < lease.monthly - 100);
+  // Ownership mode subtracts resale, so buying looks cheaper than its payments.
+  const r3 = analyze(input('ownership'));
+  assert.ok(r3.scenarios.find((s) => s.kind === 'buy').monthly < buy.monthly);
 });

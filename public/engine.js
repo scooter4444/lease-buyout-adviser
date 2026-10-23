@@ -165,6 +165,11 @@ export function normalize(input = {}) {
     docFee: num(a.docFee, 499),
     gasPrice: num(a.gasPrice, 3.4),
     discountRatePct: clamp(num(a.discountRatePct, 4), 0, 20),
+    // How the monthly figure is counted (Settings): 'payments' = what you pay over the period,
+    // nothing projected; 'ownership' = full cost of owning, minus what the car is worth at the end.
+    costMode: a.costMode === 'ownership' ? 'ownership' : 'payments',
+    includeRunning: a.includeRunning === true || a.includeRunning === 'true',
+    spreadUpfront: !(a.spreadUpfront === false || a.spreadUpfront === 'false'),
   };
 
   const c = input.current || {};
@@ -327,7 +332,8 @@ export const RUNNING = new Set(['Insurance', 'Fuel', 'Maintenance & repairs']);
 
 class Flows {
   constructor(H) { this.H = H; this.items = []; }
-  add(month, amount, category) { if (amount) this.items.push({ month, amount, category }); }
+  // settle: money that only changes hands because the period ends (resale value, loan balance paid off).
+  add(month, amount, category, settle = false) { if (amount) this.items.push({ month, amount, category, settle }); }
   nominal() { return this.items.reduce((s, f) => s + f.amount, 0); }
   pv(ratePct, keep = () => true) {
     const r = Math.pow(1 + ratePct / 100, 1 / 12) - 1;
@@ -374,9 +380,28 @@ function finance(flows, { H, price, taxesFees, down, payCash, apr, termMonths, p
     flows.add(m, prin * taxShare, 'Taxes & fees');
   }
   // Balance still owed at the end of the horizon is a cost you settle when you sell.
-  flows.add(H, st.balance * (1 - taxShare), priceLabel);
-  flows.add(H, st.balance * taxShare, 'Taxes & fees');
+  flows.add(H, st.balance * (1 - taxShare), priceLabel, true);
+  flows.add(H, st.balance * taxShare, 'Taxes & fees', true);
   return { principal, payment: st.payment, interest: st.interest, balanceAtEnd: st.balance };
+}
+
+// The headline monthly number, counted the way Settings says.
+function paymentFigures(flows, a, carPerMonth, allInPerMonth) {
+  const H = flows.H;
+  let upfront = 0, recurring = 0, running = 0;
+  for (const f of flows.items) {
+    if (f.settle) continue;
+    if (RUNNING.has(f.category)) { running += f.amount; continue; }
+    if (f.month < 1) upfront += f.amount; else recurring += f.amount;
+  }
+  const paymentsPerMonth = ((a.spreadUpfront ? upfront : 0) + recurring) / H + (a.includeRunning ? running / H : 0);
+  const ownMonthly = a.includeRunning ? allInPerMonth : carPerMonth;
+  return {
+    paymentsPerMonth,
+    paidUpfront: upfront,
+    paidOverPeriod: upfront + recurring,
+    monthly: a.costMode === 'ownership' ? ownMonthly : paymentsPerMonth,
+  };
 }
 
 function finish(flows, a, meta) {
@@ -396,6 +421,7 @@ function finish(flows, a, meta) {
     perMonth: pv / H,
     carPerMonth: carPv / H,
     runningPerMonth: (pv - carPv) / H,
+    ...paymentFigures(flows, a, carPv / H, pv / H),
     perMile: pv / ((a.annualMiles / 12) * H),
     breakdown: cats,
     flows: flows.items,
@@ -413,7 +439,7 @@ export function buyoutScenario(n, H) {
     apr: c.apr, termMonths: c.termMonths, priceLabel: 'Vehicle price',
   });
   const valueAtEnd = currentValueAt(n, H);
-  flows.add(H, -valueAtEnd, 'Vehicle price'); // what it's worth when you're done
+  flows.add(H, -valueAtEnd, 'Vehicle price', true); // what it's worth when you're done
   if (c.upcomingRepairs) flows.add(0, c.upcomingRepairs, 'Maintenance & repairs');
   const insurance = c.insuranceAnnual ?? defaultInsurance(currentValueAt(n, 0));
   operatingCosts(flows, {
@@ -452,7 +478,7 @@ export function buyNewScenario(n, v, H, exit) {
     apr: v.buy.apr, termMonths: v.buy.termMonths, priceLabel: 'Vehicle price',
   });
   const valueAtEnd = newValueAt(v, H, a.annualMiles);
-  flows.add(H, -valueAtEnd, 'Vehicle price');
+  flows.add(H, -valueAtEnd, 'Vehicle price', true);
   const insurance = v.insuranceAnnual ?? defaultInsurance(v.sellingPrice);
   operatingCosts(flows, {
     H, annualMiles: a.annualMiles, gasPrice: a.gasPrice, mpg: v.mpg, insuranceAnnual: insurance,
@@ -564,7 +590,7 @@ export function analyze(input) {
     if (v.buy.enabled) scenarios.push(buyNewScenario(n, v, H, exit));
     if (v.lease.enabled) scenarios.push(leaseNewScenario(n, v, H, exit));
   }
-  scenarios.sort((x, y) => x.pvCost - y.pvCost);
+  scenarios.sort((x, y) => x.monthly - y.monthly);
 
   // Effective monthly cost by number of years kept (1–8).
   const curve = [];
