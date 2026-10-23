@@ -158,9 +158,8 @@ export async function classifyCarPhotos(inline) {
   const keep = inline.map((d, i) => (d ? { d, i } : null)).filter(Boolean);
   if (keep.length < 4) return null;
   photoDay.count += 1;
-  const first = await pickModel(key);
-  // On a busy/quota error, try the lighter model once.
-  const models = [first, first.includes('lite') ? null : first.replace(/-flash$/, '-flash-lite'), 'gemini-flash-lite-latest'].filter((m, i, a) => m && a.indexOf(m) === i);
+  // Flash-Lite sorts 30 photos in seconds; the full Flash model is the backup.
+  const models = [process.env.GEMINI_PHOTO_MODEL || 'gemini-flash-lite-latest', await pickModel(key)].filter((m, i, a) => m && a.indexOf(m) === i);
   for (const model of models) {
     const r = await fetch(`${BASE}/v1beta/models/${model}:generateContent`, {
       method: 'POST',
@@ -169,11 +168,11 @@ export async function classifyCarPhotos(inline) {
         contents: [{ role: 'user', parts: [...keep.map((k) => ({ inline_data: k.d })), { text: PHOTO_PROMPT(keep.length) }] }],
         generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 4000 },
       }),
-      signal: AbortSignal.timeout(90000),
+      signal: AbortSignal.timeout(60000),
     }).catch((e) => ({ ok: false, status: 0, json: async () => ({ error: { message: e.message } }) }));
     const j = await r.json().catch(() => ({}));
     console.log(`[gemini] sort-photos ${r.status} model=${model} n=${keep.length}`);
-    if (!r.ok) { if (r.status === 429 || r.status === 503 || r.status === 404) continue; return null; }
+    if (!r.ok) { if ([0, 404, 429, 500, 503].includes(r.status)) continue; return null; }
     const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
     let out;
     try { out = JSON.parse(text.replace(/^```json\s*|```$/g, '')); } catch { return null; }

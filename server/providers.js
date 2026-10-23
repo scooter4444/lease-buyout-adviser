@@ -45,10 +45,13 @@ async function pace(provider, gapMs = 350) {
   if (at > now) await new Promise((r) => setTimeout(r, at - now));
 }
 
+const blockedUntil = {};
+export const providerPaused = (p) => (blockedUntil[p] || 0) > Date.now();
 async function getJSON(provider, url, { headers = {}, ttl, cacheKey }, attempt = 0) {
   const key = cacheKey || `${provider}:${url.replace(/(api_key|apiKey)=[^&]+/, '')}`;
   const hit = getCached(key);
   if (hit !== undefined) return hit;
+  if (providerPaused(provider)) throw new ProviderError(provider, 429, 'Monthly quota used up for now');
   await pace(provider);
   countCall(provider);
   const started = Date.now();
@@ -63,6 +66,12 @@ async function getJSON(provider, url, { headers = {}, ttl, cacheKey }, attempt =
   try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
   const safeUrl = url.replace(/(api_key|apiKey)=[^&]+/, '$1=***');
   console.log(`[${provider}] ${res.status} ${Date.now() - started}ms ${safeUrl} keys=${Object.keys(body || {}).slice(0, 12).join(',')}`);
+  // A used-up monthly quota won't clear with retries: stop calling this provider for a while.
+  if (res.status === 429 && /quota|limit exceeded|exhausted/i.test(JSON.stringify(body || {}))) {
+    blockedUntil[provider] = Date.now() + 3 * 3600e3;
+    console.log(`[${provider}] quota used up; pausing calls for 3 hours`);
+    throw new ProviderError(provider, 429, describe(429, body));
+  }
   if (res.status === 429 && attempt < 4) {
     await new Promise((r) => setTimeout(r, 1500 * 2 ** attempt));
     return getJSON(provider, url, { headers, ttl, cacheKey }, attempt + 1);
