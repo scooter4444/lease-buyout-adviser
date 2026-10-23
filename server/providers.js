@@ -344,7 +344,7 @@ export async function plateToVin({ state, plate }) {
 // IMAGE_URL_TEMPLATE=https://invoice-pricing.com/path/{year}/{make}/{model}.png
 // Placeholders: {year} {make} {model} {trim} (as given), {make_slug} {model_slug} (lower-case, hyphens),
 // {make_us} {model_us} (lower-case, underscores). Each candidate URL is checked once and cached.
-export const cutoutsConfigured = () => !!process.env.IMAGE_URL_TEMPLATE;
+export const cutoutsConfigured = () => !MOCK; // Autoweb studio images are always on; IMAGE_URL_TEMPLATE adds another source
 async function cutoutFor({ year, make, model, trim }) {
   const tpl = process.env.IMAGE_URL_TEMPLATE;
   if (!tpl || !make || !model) return null;
@@ -373,8 +373,41 @@ async function cutoutFor({ year, make, model, trim }) {
 
 // A photo of this exact VIN if one exists (auto.dev, free tier), otherwise a local
 // listing photo of the same year/make/model. Returns { url, exact }.
+// Studio images from Autoweb model pages (autoweb.com/{make}/{model}/{year}):
+// a transparent PNG cutout when the page has one, else a white-background studio shot.
+async function autowebImage({ year, make, model }) {
+  if (!make || !model) return null;
+  const slug = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const now = new Date().getFullYear();
+  const years = [...new Set([Number(year) || null, now + 1, now, now - 1, now - 2].filter(Boolean))];
+  for (const y of years) {
+    const url = `https://www.autoweb.com/${slug(make)}/${slug(model)}/${y}`;
+    const key = `autoweb:${url}`;
+    let found = getCached(key);
+    if (found === undefined) {
+      found = null;
+      try {
+        const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (LeaseBuyoutAdvisor)', Accept: 'text/html' }, redirect: 'follow', signal: AbortSignal.timeout(12000) });
+        if (r.ok) {
+          const html = await r.text();
+          const t = html.match(/https:\/\/img\.autobytel\.com\/chrome\/expanded\/transparent\/[^"'\s)]+\.png/);
+          const w = html.match(/https:\/\/img\.autobytel\.com\/chrome\/colormatched(?:_01)?\/white\/[^"'\s)]+\.jpg/);
+          if (t) found = { url: t[0], transparent: true };
+          else if (w) found = { url: w[0], transparent: false };
+        }
+        console.log(`[autoweb] ${r.status} ${url} ${found ? (found.transparent ? 'cutout' : 'studio') : 'none'}`);
+      } catch (e) { console.log(`[autoweb] error ${url} ${e.message}`); }
+      setCached(key, found, found ? 14 * DAY : 3 * DAY);
+    }
+    if (found) return found;
+  }
+  return null;
+}
+
 export async function photoFor({ vin, year, make, model, trim, zip, prefer }) {
   if (MOCK) return mock.photo({ make, model });
+  const aw = await autowebImage({ year, make, model });
+  if (aw) return { url: aw.url, exact: false, cutout: true, custom: true, blend: !aw.transparent, source: 'Autoweb' };
   const cut = await cutoutFor({ year, make, model, trim });
   if (cut) return { url: cut, exact: false, cutout: true, custom: true };
   if (prefer === 'cutout') return { url: null, exact: false };

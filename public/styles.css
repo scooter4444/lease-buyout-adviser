@@ -436,3 +436,6 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.45); }
 .photo-btn { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.82rem; font-weight: 600; color: var(--ink); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .photo-btn:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
 .step[hidden] { display: none; }
+/* White-background studio shots melt into the card's light backdrop. */
+.ph.blend { mix-blend-mode: multiply; }
+.mc-pic, .g-pic, .c-pic, .car-id .car-ph, .sticker figure { isolation: isolate; }

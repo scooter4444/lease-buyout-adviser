@@ -198,7 +198,7 @@ function candidateHTML(c, i) {
 }
 
 // ---------- Photos ----------
-const phCls = (ph, cls = '') => `${cls}${ph?.custom ? ' contain' : ''}`;
+const phCls = (ph, cls = '') => `${cls}${ph?.custom ? ' contain' : ''}${ph?.blend ? ' blend' : ''}`;
 const photoOf = (c) => (c.photo?.cutout ? c.photo.url : null) || c.market?.photo || c.photo?.url || null;
 let cutoutsOn = false;
 function imgHTML(url, alt, cls = '') {
