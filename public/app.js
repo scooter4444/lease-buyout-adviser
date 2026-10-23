@@ -2,6 +2,7 @@ import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, taxDefaul
 import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
 import { logoUrl, logoIsMono } from './logos.js';
 import { bestStack, classify, eligible, regionOk } from './stack.js';
+import { renderSafety, loadSafety } from './safety.js';
 
 // ---------- State ----------
 const STORAGE_KEY = 'lba:v2';
@@ -740,7 +741,7 @@ let saveTimer;
 function snapshot() {
   const profiles = {};
   for (const [id, p] of Object.entries(store.profiles)) {
-    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, regionInfo: p.regionInfo, needsOfferRefresh: p.needsOfferRefresh, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
+    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, safetyPrefs: p.safetyPrefs, regionInfo: p.regionInfo, needsOfferRefresh: p.needsOfferRefresh, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
   }
   return JSON.stringify({ active: store.active, rev: store.rev || 0, profiles });
 }
@@ -770,6 +771,7 @@ function hydrate(p) {
     assumptions: { ...b.assumptions, ...p.assumptions },
     eligibility: { leaseCaptive: true, ...(p.eligibility || {}) },
     regionInfo: { ...(p.regionInfo || {}) },
+    safetyPrefs: { ...(p.safetyPrefs || {}) },
     needsOfferRefresh: !!p.needsOfferRefresh,
     current: { ...b.current, ...p.current },
     candidates: (p.candidates || []).map((c) => blankCandidate({ ...c, buy: { ...blankCandidate().buy, ...c.buy }, lease: { ...blankCandidate().lease, ...c.lease } })),
@@ -1821,7 +1823,31 @@ function setTab(t, { scroll = true } = {}) {
   for (const b of $$('.tabs [role="tab"]')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
   if (scroll && changed && !wide()) window.scrollTo({ top: 0 });
   if (t === 'models') renderModels();
+  if (t === 'safety') renderSafetyTab();
 }
+
+// ---------- Safety tab ----------
+function renderSafetyTab() {
+  const el = $('#safety');
+  if (!el) return;
+  state.safetyPrefs ||= {};
+  renderSafety(el, {
+    current: state.current, candidates: state.candidates.filter((c) => c.make && c.model),
+    prefs: state.safetyPrefs, save: () => persist(), rerender: () => { if (document.body.dataset.tab === 'safety') renderSafetyTab(); },
+    api, esc, logoHTML,
+    photoHTML: (car, mine) => {
+      const ph = mine ? (state.photo?.url ? state.photo : null) : (photoOf(car) ? { url: photoOf(car), custom: !!car.photo?.cutout } : null);
+      return imgHTML(ph?.url, [car.year, car.make, car.model].filter(Boolean).join(' '), phCls(ph, 'contain'));
+    },
+    sub: (car, mine, rec) => {
+      if (mine) return [`${car.year || ''} ${car.trim || ''}`.trim(), Number(car.buyoutPrice) ? `${money(Number(car.buyoutPrice))} buyout` : ''].filter(Boolean).join(' · ');
+      const used = car.condition && car.condition !== 'new';
+      const what = `${used ? 'Used' : 'New'}${car.year ? ` ${car.year}` : ''}${car.trim ? ` ${car.trim}` : ''}`;
+      return rec?.researched && rec.trim && norm2(rec.trim) !== norm2(car.trim) ? `${what} · rated as ${rec.year} ${rec.trim}` : what;
+    },
+  });
+}
+const norm2 = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
 function applyLeaseOffer(c, o) {
   const t = leaseTermsFromOffer(o);
@@ -1961,6 +1987,7 @@ function renderAll() {
   $('#carStatus').textContent = '';
   renderResults();
   renderModels();
+  if (document.body.dataset.tab === 'safety') renderSafetyTab();
 }
 
 let resizeTimer;

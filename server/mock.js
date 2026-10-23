@@ -62,3 +62,11 @@ export async function photo({ make = '', model = '' }) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200"><rect width="320" height="200" fill="hsl(${h},25%,88%)"/><path d="M40 140 L60 95 Q70 80 95 78 L215 78 Q240 80 255 100 L285 120 Q292 125 292 135 L292 148 L40 148 Z" fill="hsl(${h},35%,38%)"/><rect x="100" y="88" width="55" height="26" rx="4" fill="hsl(${h},30%,80%)"/><rect x="162" y="88" width="55" height="26" rx="4" fill="hsl(${h},30%,80%)"/><circle cx="95" cy="150" r="20" fill="#222"/><circle cx="240" cy="150" r="20" fill="#222"/><circle cx="95" cy="150" r="8" fill="#999"/><circle cx="240" cy="150" r="8" fill="#999"/></svg>`;
   return { url: `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`, exact: false };
 }
+
+// NHTSA safety API (offline demo data).
+export async function nhtsa(path) {
+  if (path.startsWith('/SafetyRatings/modelyear')) return { Count: 1, Results: [{ VehicleDescription: '2026 Demo SUV AWD', VehicleId: 1 }] };
+  if (path.startsWith('/SafetyRatings/VehicleId')) return { Results: [{ VehicleDescription: '2026 Demo SUV AWD', OverallRating: '5', OverallFrontCrashRating: '4', OverallSideCrashRating: '5', RolloverRating: '4', RolloverPossibility: 0.163 }] };
+  if (path.startsWith('/recalls')) return { Count: 2, results: [{ Component: 'AIR BAGS:FRONTAL' }, { Component: 'ELECTRICAL SYSTEM' }] };
+  return {};
+}

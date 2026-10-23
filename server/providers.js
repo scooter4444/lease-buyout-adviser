@@ -487,3 +487,43 @@ export async function photoFor({ vin, year, make, model, trim, zip, prefer }) {
   }
   return { url: null, exact: false };
 }
+
+// ---------- Safety: NHTSA 5-Star ratings and recalls (free public API, no key) ----------
+const NHTSA = 'https://api.nhtsa.gov';
+function nh(path) {
+  if (MOCK) return mock.nhtsa(path);
+  return getJSON('nhtsa', `${NHTSA}${path}`, { ttl: 7 * DAY });
+}
+const cap = (s) => String(s || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+export async function nhtsaSafety({ year, make, model }) {
+  if (!year || !make || !model) throw new ProviderError('app', 400, 'year, make and model are required');
+  const seg = (s) => encodeURIComponent(String(s).trim());
+  const errors = [];
+  let ratings = null;
+  const list = await attempt(() => nh(`/SafetyRatings/modelyear/${seg(year)}/make/${seg(make)}/model/${seg(model)}`));
+  if (list.ok) {
+    const vs = list.data?.Results || [];
+    // Prefer the all-wheel-drive version, as the cars being compared are mostly AWD.
+    const v = vs.find((x) => /AWD|4WD/i.test(x.VehicleDescription || '')) || vs[0];
+    if (v) {
+      const r = await attempt(() => nh(`/SafetyRatings/VehicleId/${v.VehicleId}`));
+      if (r.ok) {
+        const x = r.data?.Results?.[0] || {};
+        const n = (s) => (/^\d$/.test(String(s)) ? Number(s) : null);
+        ratings = {
+          vehicle: x.VehicleDescription || v.VehicleDescription,
+          overall: n(x.OverallRating), frontal: n(x.OverallFrontCrashRating), side: n(x.OverallSideCrashRating), rollover: n(x.RolloverRating),
+          rolloverRiskPct: x.RolloverPossibility ? Math.round(x.RolloverPossibility * 1000) / 10 : null,
+          url: `https://www.nhtsa.gov/vehicle/${seg(year)}/${seg(make.toUpperCase())}/${seg(model.toUpperCase())}`,
+        };
+      } else errors.push(r.error);
+    }
+  } else errors.push(list.error);
+  let recalls = null;
+  const rc = await attempt(() => nh(`/recalls/recallsByVehicle?${qs({ make, model, modelYear: year })}`));
+  if (rc.ok) {
+    const rs = rc.data?.results || rc.data?.Results || [];
+    recalls = { count: rs.length, topics: [...new Set(rs.map((x) => cap(String(x.Component || '').split(':')[0])))].filter(Boolean).slice(0, 8) };
+  } else errors.push(rc.error);
+  return { year: Number(year), make, model, ratings, recalls, errors };
+}

@@ -1,0 +1,940 @@
+{
+ "updated": "2026-10-23",
+ "sources": {
+  "nhtsa": "https://www.nhtsa.gov/ratings",
+  "iihs": "https://www.iihs.org/ratings",
+  "reviews": "Edmunds"
+ },
+ "cars": [
+  {
+   "id": "edge",
+   "make": "Ford",
+   "model": "Edge",
+   "name": "2024 Ford Edge SEL AWD",
+   "note": "The SEL’s standard headlights rate Poor for glare at IIHS. Stop-and-go cruise and lane centering need the optional Co-Pilot360 Assist+ package.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 5,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 15.5,
+    "recalls": 2,
+    "url": "https://www.nhtsa.gov/vehicle/2024/FORD/EDGE/SUV/AWD",
+    "recallTopics": [
+     "Rearview camera image may delay/freeze/blank",
+     "Accessory Protocol Interface Module overheat can kill rearview camera"
+    ]
+   },
+   "iihs": {
+    "award": null,
+    "awardYear": null,
+    "url": "https://www.iihs.org/ratings/vehicle/ford/edge-4-door-suv/2024",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": null,
+    "sideUpdated": "G",
+    "pedestrianAEB": "Advanced",
+    "seatBeltReminders": null,
+    "latch": "A",
+    "headlights": "P"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": "optional",
+    "laneCentering": "optional",
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": null,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": false,
+    "ventilatedSeats": false,
+    "heatedSeats": true,
+    "heatedWheel": "optional",
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": "optional",
+    "awd": true
+   },
+   "specs": {
+    "screen": "12-in",
+    "cargo": 39.2,
+    "cargoMax": 73.4,
+    "seating": 5,
+    "hp": 250,
+    "mpg": 23,
+    "tow": 3500
+   },
+   "warranty": "3 yr / 36k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": null,
+    "score": "–",
+    "verdict": "Roomy, quiet and comfortable, but reviewers find it average at everything and dated inside.",
+    "pros": [
+     "Plush seats",
+     "Plenty of passenger and cargo room",
+     "Quiet at highway speeds"
+    ],
+    "cons": [
+     "Dated interior and controls",
+     "Thick pillars hurt visibility",
+     "Slow transmission responses"
+    ],
+    "url": "https://www.edmunds.com/ford/edge/2024/review/"
+   },
+   "reliability": "Reliability: 3.5/5 (RepairPal)",
+   "year": 2024,
+   "trim": "SEL AWD"
+  },
+  {
+   "id": "santafe",
+   "make": "Hyundai",
+   "model": "Santa Fe",
+   "name": "2026 Hyundai Santa Fe SE AWD",
+   "note": "The SE has no heated seats; they start one trim up.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 5,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 17.4,
+    "recalls": 4,
+    "url": "https://www.nhtsa.gov/vehicle/2026/HYUNDAI/SANTA%252520FE/SUV/AWD",
+    "recallTopics": [
+     "Connecting-rod bolts under-torqued, possible power loss",
+     "Side curtain airbags may not deploy properly",
+     "Instrument cluster display may fail",
+     "Front seat-belt anchorages may detach"
+    ]
+   },
+   "iihs": {
+    "award": "TSP+",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/hyundai/santa-fe-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "A",
+    "headlights": "A"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": true,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": null,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": false,
+    "ventilatedSeats": false,
+    "heatedSeats": false,
+    "heatedWheel": false,
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": true,
+    "panoramicRoof": false,
+    "awd": "optional"
+   },
+   "specs": {
+    "screen": "12.3-in",
+    "cargo": 41,
+    "cargoMax": 80,
+    "seating": 7,
+    "hp": 277,
+    "mpg": 23,
+    "tow": 3500
+   },
+   "warranty": "5 yr / 60k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.5,
+    "score": "7.5",
+    "verdict": "A smart, roomy family pick for people who don’t need a full-size three-row.",
+    "pros": [
+     "Versatile, roomy interior",
+     "Distinctive styling",
+     "Compact footprint for parking"
+    ],
+    "cons": [
+     "Disappointing real-world fuel economy",
+     "Poor rear visibility"
+    ],
+    "url": "https://www.edmunds.com/hyundai/santa-fe/2026/review/"
+   },
+   "reliability": "Reliability: 3.5/5 Above Average (RepairPal)",
+   "year": 2026,
+   "trim": "SE AWD"
+  },
+  {
+   "id": "sorento",
+   "make": "Kia",
+   "model": "Sorento",
+   "name": "2026 Kia Sorento LX FWD",
+   "note": "The LX in this deal is front-wheel drive only. The cheapest all-wheel-drive Sorento is the S.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 4,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 15.9,
+    "recalls": 2,
+    "url": "https://www.nhtsa.gov/vehicle/2026/KIA/SORENTO/SUV/AWD",
+    "recallTopics": [
+     "Incorrect spare tire may impair ABS/traction control",
+     "Instrument cluster display may fail"
+    ]
+   },
+   "iihs": {
+    "award": "TSP+",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/kia/sorento-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "A",
+    "headlights": "A"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": true,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": null,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": false,
+    "ventilatedSeats": false,
+    "heatedSeats": false,
+    "heatedWheel": false,
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": false,
+    "panoramicRoof": false,
+    "awd": false
+   },
+   "specs": {
+    "screen": "12.3-in",
+    "cargo": 39,
+    "cargoMax": 76,
+    "seating": 7,
+    "hp": 191,
+    "mpg": 26,
+    "tow": 2000
+   },
+   "warranty": "5 yr / 60k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.7,
+    "score": "7.7",
+    "verdict": "A strong all-rounder with lots of standard equipment and good second-row room.",
+    "pros": [
+     "Lots of standard features",
+     "Generous second-row legroom",
+     "Easy-to-use infotainment, quiet on highway"
+    ],
+    "cons": [
+     "Little cargo room with third row up",
+     "Stiff ride on rough pavement"
+    ],
+    "url": "https://www.edmunds.com/kia/sorento/2026/review/"
+   },
+   "reliability": "Reliability: 4/5 Above Average (RepairPal)",
+   "year": 2026,
+   "trim": "LX FWD"
+  },
+  {
+   "id": "murano",
+   "make": "Nissan",
+   "model": "Murano",
+   "name": "2026 Nissan Murano SL AWD",
+   "note": "Hands-free ProPILOT Assist 2.1 is Platinum-only. Cooled seats on the SL aren’t confirmed.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 4,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 16.9,
+    "recalls": 0,
+    "url": "https://www.nhtsa.gov/vehicle/2026/NISSAN/MURANO/SUV/AWD",
+    "recallTopics": []
+   },
+   "iihs": {
+    "award": "TSP+",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/nissan/murano-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "G",
+    "headlights": "A"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": true,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": true,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": true,
+    "ventilatedSeats": null,
+    "heatedSeats": true,
+    "heatedWheel": true,
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": true,
+    "awd": true
+   },
+   "specs": {
+    "screen": "12.3-in",
+    "cargo": 32.9,
+    "cargoMax": 63.5,
+    "seating": 5,
+    "hp": 241,
+    "mpg": 23,
+    "tow": 1500
+   },
+   "warranty": "3 yr / 36k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 6.2,
+    "score": "6.2",
+    "verdict": "Comfortable and a bit upscale, but priced close to bigger and luxury SUVs.",
+    "pros": [
+     "Very comfortable front seats",
+     "Quiet highway cabin",
+     "Lots of standard driver aids"
+    ],
+    "cons": [
+     "Less spacious than rivals",
+     "Distracting controls",
+     "Priced close to three-rows and luxury SUVs"
+    ],
+    "url": "https://www.edmunds.com/nissan/murano/2026/review/"
+   },
+   "reliability": "Reliability: 4/5 Above Average (RepairPal)",
+   "year": 2026,
+   "trim": "SL AWD"
+  },
+  {
+   "id": "explorer",
+   "make": "Ford",
+   "model": "Explorer",
+   "name": "2026 Ford Explorer Active",
+   "note": "NHTSA lists 14 recalls across all 2026 Explorers, several for the 2.3L engine this trim uses; check the VIN. The Florida deal is rear-wheel drive; 4WD is optional. BlueCruise isn’t offered on the Active.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 5,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 15.1,
+    "recalls": 14,
+    "url": "https://www.nhtsa.gov/vehicle/2026/FORD/EXPLORER%252520GAS/SUV/4WD",
+    "recallTopics": [
+     "Windshield air bubbles / windshield may detach in crash",
+     "Cylinder-head oil leak, fire risk",
+     "Loose trailer-hitch bolts",
+     "Adaptive headlight software aims wrong in curves",
+     "2nd-row seat-belt anchor bolts",
+     "HVAC failure disables defrost",
+     "2.3L engine internal failures: piston circlips, conn-rod bearings, piston domes, loss of drive power",
+     "2nd-row easy-entry seat switch sticks",
+     "Driver seat may recline unintentionally",
+     "Passenger frontal airbag vent may prevent proper deployment"
+    ]
+   },
+   "iihs": {
+    "award": "TSP",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/ford/explorer-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "A",
+    "headlights": "G"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": null,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": null,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": false,
+    "ventilatedSeats": false,
+    "heatedSeats": true,
+    "heatedWheel": "optional",
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": "optional",
+    "awd": "optional"
+   },
+   "specs": {
+    "screen": "13.2-in",
+    "cargo": 46,
+    "cargoMax": 85.8,
+    "seating": 6,
+    "hp": 300,
+    "mpg": 24,
+    "tow": 5000
+   },
+   "warranty": "3 yr / 36k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.2,
+    "score": "7.2",
+    "verdict": "Quick and confident to drive with lots of tech, but tighter in the back rows than rivals.",
+    "pros": [
+     "Strong, quick engines",
+     "Secure, confident handling",
+     "Lots of tech and driver aids"
+    ],
+    "cons": [
+     "Less 2nd/3rd-row space than rivals",
+     "BlueCruise needs a subscription"
+    ],
+    "url": "https://www.edmunds.com/ford/explorer/2026/review/"
+   },
+   "reliability": "Reliability: 3.5/5 Above Average (RepairPal)",
+   "year": 2026,
+   "trim": "Active"
+  },
+  {
+   "id": "nautilus",
+   "make": "Lincoln",
+   "model": "Nautilus",
+   "name": "2026 Lincoln Nautilus Premiere AWD",
+   "note": "BlueCruise hands-free driving is standard, with 4 years of service included.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 5,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 16.9,
+    "recalls": 0,
+    "url": "https://www.nhtsa.gov/vehicle/2026/LINCOLN/NAUTILUS/SUV/AWD",
+    "recallTopics": []
+   },
+   "iihs": {
+    "award": "TSP",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/lincoln/nautilus-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "G",
+    "headlights": "G"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": true,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": null,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": "standard",
+    "handsFreeName": "BlueCruise",
+    "camera360": true,
+    "ventilatedSeats": "optional",
+    "heatedSeats": true,
+    "heatedWheel": true,
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": "optional",
+    "awd": true
+   },
+   "specs": {
+    "screen": "48-in",
+    "cargo": 36.4,
+    "cargoMax": 71.3,
+    "seating": 5,
+    "hp": 250,
+    "mpg": 24,
+    "tow": 1750
+   },
+   "warranty": "4 yr / 50k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 6.6,
+    "score": "6.6",
+    "verdict": "Handsome and roomy with a striking dash screen; fussy controls and pricey options hold it back.",
+    "pros": [
+     "Roomy seating and cargo area",
+     "Stylish design",
+     "Hybrid option gets strong mpg"
+    ],
+    "cons": [
+     "Distracting-to-use controls",
+     "Lackluster acceleration and braking"
+    ],
+    "url": "https://www.edmunds.com/lincoln/nautilus/2026/"
+   },
+   "reliability": "Reliability: Predicted average reliability (Consumer Reports)",
+   "year": 2026,
+   "trim": "Premiere AWD"
+  },
+  {
+   "id": "gv70",
+   "make": "Genesis",
+   "model": "GV70",
+   "name": "2026 Genesis GV70 2.5T AWD",
+   "note": "Highway Driving Assist is hands-on; there’s no hands-free system on the base 2.5T.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 4,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 13.0,
+    "recalls": 3,
+    "url": "https://www.nhtsa.gov/vehicle/2026/GENESIS/GV70/SUV/AWD",
+    "recallTopics": [
+     "Curtain airbags may be improperly installed",
+     "Instrument cluster software may fail display",
+     "Fuel leak at pipe-to-fuel-rail connection"
+    ]
+   },
+   "iihs": {
+    "award": "TSP+",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/genesis/gv70-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "G",
+    "headlights": "A"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": true,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": false,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": "optional",
+    "ventilatedSeats": "optional",
+    "heatedSeats": true,
+    "heatedWheel": "optional",
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": true,
+    "panoramicRoof": "optional",
+    "awd": true
+   },
+   "specs": {
+    "screen": "27-in",
+    "cargo": 28.9,
+    "cargoMax": 56.9,
+    "seating": 5,
+    "hp": 300,
+    "mpg": 22,
+    "tow": 3500
+   },
+   "warranty": "5 yr / 60k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.8,
+    "score": "7.8",
+    "verdict": "Comfortable, stylish and well equipped for thousands less than most luxury rivals.",
+    "pros": [
+     "Spacious, comfortable cabin",
+     "Composed ride and handling",
+     "Strong value vs. luxury rivals"
+    ],
+    "cons": [
+     "Some controls awkward to reach or use",
+     "Limited small-item storage"
+    ],
+    "url": "https://www.edmunds.com/genesis/gv70/2026/"
+   },
+   "reliability": "Reliability: Predicted below-average reliability (Consumer Reports)",
+   "year": 2026,
+   "trim": "2.5T AWD"
+  },
+  {
+   "id": "passport",
+   "make": "Honda",
+   "model": "Passport",
+   "name": "2026 Honda Passport RTL",
+   "note": "Cooled seats, heated wheel and 360° camera are TrailSport Elite only.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 4,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 16.4,
+    "recalls": 1,
+    "url": "https://www.nhtsa.gov/vehicle/2026/HONDA/PASSPORT/SUV/AWD",
+    "recallTopics": [
+     "Rear subframe bolts may be improperly tightened"
+    ]
+   },
+   "iihs": {
+    "award": "TSP+",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/honda/passport-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "G",
+    "headlights": "G"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": true,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": true,
+    "driverAttention": true
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": false,
+    "ventilatedSeats": false,
+    "heatedSeats": true,
+    "heatedWheel": false,
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": false,
+    "awd": true
+   },
+   "specs": {
+    "screen": "12.3-in",
+    "cargo": 44.0,
+    "cargoMax": 83.8,
+    "seating": 5,
+    "hp": 285,
+    "mpg": 21,
+    "tow": 5000
+   },
+   "warranty": "3 yr / 36k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.5,
+    "score": "7.5",
+    "verdict": "Among the best midsize two-row SUVs if you don’t need a third row.",
+    "pros": [
+     "Comfortable, spacious cabin",
+     "Standard AWD and V6",
+     "Clever interior storage"
+    ],
+    "cons": [
+     "Priced higher than other midsize SUVs",
+     "No hybrid option"
+    ],
+    "url": "https://www.edmunds.com/honda/passport/2026/"
+   },
+   "reliability": "Reliability: Predicted much better than average (Consumer Reports)",
+   "year": 2026,
+   "trim": "RTL"
+  },
+  {
+   "id": "nx",
+   "make": "Lexus",
+   "model": "NX",
+   "name": "2026 Lexus NX 350 AWD",
+   "note": "NHTSA hasn’t given the 2026 NX 350 an overall rating yet (front 4 stars, side 5). Cooled seats, heated wheel and 360° camera are options.",
+   "nhtsa": {
+    "overall": null,
+    "frontal": 4,
+    "side": 5,
+    "rollover": null,
+    "rolloverRiskPct": null,
+    "recalls": 0,
+    "url": "https://www.nhtsa.gov/vehicle/2026/LEXUS/NX%252520350/SUV/AWD",
+    "recallTopics": []
+   },
+   "iihs": {
+    "award": "TSP+",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/lexus/nx-4-door-suv/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "G",
+    "seatBeltReminders": "G",
+    "latch": "G",
+    "headlights": "G"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": null,
+    "laneCentering": null,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": true,
+    "driverAttention": null
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": "optional",
+    "ventilatedSeats": "optional",
+    "heatedSeats": true,
+    "heatedWheel": "optional",
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": "optional",
+    "awd": true
+   },
+   "specs": {
+    "screen": "9.8-in",
+    "cargo": 22.7,
+    "cargoMax": 46.9,
+    "seating": 5,
+    "hp": 275,
+    "mpg": 24,
+    "tow": 2000
+   },
+   "warranty": "4 yr / 50k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 6.8,
+    "score": "6.8",
+    "verdict": "A strong small luxury SUV with a nice cabin and lots standard, if you can live with less room inside.",
+    "pros": [
+     "Attractive cabin",
+     "Many desirable features standard",
+     "Efficient hybrid available"
+    ],
+    "cons": [
+     "Some distracting controls",
+     "Less cargo and rear-seat space than most rivals"
+    ],
+    "url": "https://www.edmunds.com/lexus/nx/2026/review/"
+   },
+   "reliability": "",
+   "year": 2026,
+   "trim": "350 AWD"
+  },
+  {
+   "id": "xt5",
+   "make": "Cadillac",
+   "model": "XT5",
+   "name": "2023 Cadillac XT5 Premium Luxury AWD",
+   "note": "Not every IIHS test was run on the 2023. Adaptive cruise and the 360° camera were options, so check the specific car. Little or no factory basic warranty is left; Cadillac Certified adds a year.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 5,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 15.1,
+    "recalls": 4,
+    "url": "https://www.nhtsa.gov/vehicle/2023/CADILLAC/XT5/SUV/AWD",
+    "recallTopics": [
+     "Cert label tire info may be illegible",
+     "Right-front axle/half-shaft may separate from transmission",
+     "Incorrect sun gear may let half-shaft disengage",
+     "Instrument panel may not light hazard/turn/high-beam indicators"
+    ]
+   },
+   "iihs": {
+    "award": null,
+    "awardYear": null,
+    "url": "https://www.iihs.org/ratings/vehicle/cadillac/xt5-4-door-suv/2023",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": null,
+    "moderateOverlapUpdated": null,
+    "sideUpdated": null,
+    "pedestrianAEB": null,
+    "seatBeltReminders": null,
+    "latch": "A",
+    "headlights": "M"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": "optional",
+    "laneCentering": false,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": "optional",
+    "driverAttention": null
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": "optional",
+    "ventilatedSeats": "optional",
+    "heatedSeats": true,
+    "heatedWheel": true,
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": true,
+    "awd": "optional"
+   },
+   "specs": {
+    "screen": "8-in",
+    "cargo": 30.0,
+    "cargoMax": 63.0,
+    "seating": 5,
+    "hp": 235,
+    "mpg": 23,
+    "tow": 3500
+   },
+   "warranty": "4 yr / 50k (factory, from original in-service date)",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.4,
+    "score": "7.4",
+    "verdict": "Roomy and a good value for a luxury SUV, though it doesn’t stand out at anything.",
+    "pros": [
+     "Generous front and rear room",
+     "Lower price than many rivals"
+    ],
+    "cons": [
+     "Poor rear visibility",
+     "Modest cargo and small-item storage",
+     "Noticeable road and wind noise"
+    ],
+    "url": "https://www.edmunds.com/cadillac/xt5/2023/"
+   },
+   "reliability": "Reliability: More reliable than other 2023 models (Consumer Reports)",
+   "year": 2023,
+   "trim": "Premium Luxury AWD"
+  },
+  {
+   "id": "rdx",
+   "make": "Acura",
+   "model": "RDX",
+   "name": "2023 Acura RDX Technology SH-AWD",
+   "note": "Its Top Safety Pick+ is from 2023, under older test rules. The 360° camera needs the Advance package. Acura Certified adds powertrain coverage to 7 years / 100k.",
+   "nhtsa": {
+    "overall": 5,
+    "frontal": 4,
+    "side": 5,
+    "rollover": 4,
+    "rolloverRiskPct": 15.0,
+    "recalls": 2,
+    "url": "https://www.nhtsa.gov/vehicle/2023/ACURA/RDX/SUV/AWD",
+    "recallTopics": [
+     "VSA modulator brake-fluid leak, risk of unintended movement",
+     "Front passenger seat occupant-classification sensor fault affecting airbags"
+    ]
+   },
+   "iihs": {
+    "award": "TSP+",
+    "awardYear": 2023,
+    "url": "https://www.iihs.org/ratings/vehicle/acura/rdx-4-door-suv/2023",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": null,
+    "sideUpdated": "G",
+    "pedestrianAEB": "Superior",
+    "seatBeltReminders": "G",
+    "latch": "G",
+    "headlights": "G"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": true,
+    "laneCentering": true,
+    "blindSpot": true,
+    "rearCrossTraffic": true,
+    "rearAEB": null,
+    "driverAttention": null
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": false,
+    "ventilatedSeats": false,
+    "heatedSeats": true,
+    "heatedWheel": false,
+    "wirelessCarPlay": true,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": true,
+    "awd": "optional"
+   },
+   "specs": {
+    "screen": "10.2-in",
+    "cargo": 31.1,
+    "cargoMax": 79.8,
+    "seating": 5,
+    "hp": 272,
+    "mpg": 23,
+    "tow": 1500
+   },
+   "warranty": "4 yr / 50k (factory, from original in-service date)",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.9,
+    "score": "7.9",
+    "verdict": "A good-value luxury SUV with a roomy cabin and sharp handling; the touchpad controller is a chore.",
+    "pros": [
+     "Spacious cabin and cargo area",
+     "Responsive steering and handling",
+     "Lots of tech for the money"
+    ],
+    "cons": [
+     "Only one engine",
+     "Options only in bundled packages",
+     "Touchpad controller hard to use"
+    ],
+    "url": "https://www.edmunds.com/acura/rdx/2023/"
+   },
+   "reliability": "Reliability: About average reliability vs. other 2023 models (Consumer Reports)",
+   "year": 2023,
+   "trim": "Technology SH-AWD"
+  }
+ ]
+}
