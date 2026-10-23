@@ -56,6 +56,7 @@
             <div class="car-id" id="carId" hidden></div>
 
             <h3>Lease terms</h3>
+            <label class="btn small scan-btn inline"><input type="file" accept="image/*" id="payoffPhotoCar" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>Fill from a payoff letter photo</label>
             <div class="grid" data-fields="lease"></div>
 
             <h3>The car today</h3>
@@ -147,6 +148,7 @@
       <p class="sheet-sub">The VIN gives the exact year, trim and options, so the value is for your car, not an average one.</p>
       <label class="field"><span>Name this car</span><input id="newName" placeholder="e.g. My Expedition"></label>
       <label class="field"><span>VIN</span><input id="newVin" class="vin" maxlength="17" spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="17 characters"></label>
+      <label class="btn scan-btn"><input type="file" accept="image/*" capture="environment" id="vinPhoto" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>Scan the VIN with your camera</label>
       <p class="hint">On the driver’s side of the windshield, the door frame, your registration or insurance card, or the FordPass app.</p>
       <details class="plate"><summary>No VIN handy? Use the license plate</summary>
         <div class="lookup" style="grid-template-columns: 90px 1fr auto; margin-top: 8px">
@@ -175,6 +177,7 @@
     <section class="step" data-step="3" hidden>
       <h3 class="step-h">The lease numbers</h3>
       <p class="sheet-sub">All on your payoff quote from the leasing company (online account, or call and ask for a lease-end payoff).</p>
+      <label class="btn scan-btn"><input type="file" accept="image/*" id="payoffPhoto" hidden><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>Snap or upload the payoff letter</label>
       <label class="field"><span>Buyout price</span><span class="input has-pre"><span class="pre">$</span><input id="newBuyout" inputmode="decimal" class="big" placeholder="from your payoff quote"></span></label>
       <label class="field"><span>Decide by (lease end date)</span><input id="newEnd" type="date"></label>
       <div class="grid">

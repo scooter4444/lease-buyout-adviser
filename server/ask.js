@@ -98,3 +98,43 @@ export async function ask({ question, context }) {
     .map((w) => ({ title: w.title || w.uri, url: w.uri }));
   return { model, answer, sources, remaining: PER_DAY - S.count };
 }
+
+// ---------- Reading photos: a VIN label or a lease payoff letter ----------
+const PROMPTS = {
+  vin: `Find the vehicle identification number (VIN) in this photo. It is 17 characters, letters and digits, never I, O or Q, often printed under a barcode on a door-jamb or windshield label. Return JSON {"vin": "...", "confidence": "high|medium|low"}; use null for vin if none is readable.`,
+  payoff: `This is a car lease payoff quote, lease-end letter, or lease account screen. Extract what's there into JSON with these keys (null when not shown; numbers without $ or commas; dates as YYYY-MM-DD):
+{"lessor": string, "buyoutPrice": number (the lease-end purchase/payoff amount to buy the car), "payoffGoodThrough": date, "leaseEndDate": date (maturity date), "purchaseOptionFee": number, "milesAllowed": number (TOTAL miles for the whole lease), "excessMileRate": number (dollars per mile), "dispositionFee": number, "monthlyPayment": number, "remainingPayments": number, "odometer": number, "vin": string, "notes": string (one short sentence on anything important, e.g. taxes not included)}.
+If several amounts appear, buyoutPrice is the amount to purchase the vehicle (residual + fees), not the early-termination or turn-in amount.`,
+};
+
+export async function readImage({ kind, dataUrl }) {
+  if (!PROMPTS[kind]) throw Object.assign(new Error('Unknown photo type.'), { status: 400 });
+  const m = /^data:(image\/(?:png|jpeg|webp|heic|heif));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+  if (!m) throw Object.assign(new Error('Send a photo (JPEG, PNG, WebP or HEIC).'), { status: 400 });
+  if (S.day !== today()) { S.day = today(); S.count = 0; }
+  if (S.count >= PER_DAY) throw Object.assign(new Error('Today’s assistant limit is used up. Type it in for now.'), { status: 429 });
+  S.count += 1; save();
+  if (MOCK) {
+    await new Promise((r) => setTimeout(r, 300));
+    return kind === 'vin'
+      ? { vin: '1FMJU1K80PEA12345', confidence: 'high' }
+      : { lessor: 'Ford Credit', buyoutPrice: 48900, payoffGoodThrough: '2026-11-15', leaseEndDate: '2027-03-14', purchaseOptionFee: null, milesAllowed: 31500, excessMileRate: 0.2, dispositionFee: 395, monthlyPayment: 812, remainingPayments: 5, odometer: null, vin: null, notes: 'Sales tax not included.' };
+  }
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) throw Object.assign(new Error('Reading photos needs the Gemini key (GEMINI_API_KEY) in Railway. Type it in for now.'), { status: 503 });
+  const model = await pickModel(key);
+  const r = await fetch(`${BASE}/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ inline_data: { mime_type: m[1], data: m[2] } }, { text: PROMPTS[kind] }] }],
+      generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens: 800 },
+    }),
+    signal: AbortSignal.timeout(45000),
+  });
+  const j = await r.json().catch(() => ({}));
+  console.log(`[gemini] read-${kind} ${r.status} model=${model}`);
+  if (!r.ok) throw Object.assign(new Error(r.status === 429 ? 'Gemini is busy. Try again in a minute.' : `Couldn’t read the photo (${j?.error?.message?.slice(0, 120) || r.status}).`), { status: r.status === 429 ? 429 : 502 });
+  const text = (j.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join('');
+  try { return JSON.parse(text.replace(/^```json\s*|```$/g, '')); } catch { throw Object.assign(new Error('Couldn’t read that photo. Try a sharper, closer shot.'), { status: 422 }); }
+}

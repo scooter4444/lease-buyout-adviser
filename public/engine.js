@@ -206,10 +206,16 @@ export function normalize(input = {}) {
     const vlux = bool(v.luxury, LUXURY_MAKES.has(vmake.toLowerCase()));
     const vmsrp = num(v.msrp, 0) || num(v.sellingPrice, 0);
     const price = num(v.sellingPrice, 0) || vmsrp;
+    const condition = ['used', 'certified'].includes(v.condition) ? v.condition : 'new';
+    const vyear = num(v.year, today.getFullYear() + 1);
+    const used = condition !== 'new';
     return {
+      condition,
+      ageYears: used ? modelAge(vyear, today) : 0,
+      startMiles: used ? num(v.miles, 12000 * Math.max(1, modelAge(vyear, today))) : 0,
       id: v.id || `c${i}`,
       label: v.label || [v.year, vmake, v.model, v.trim].filter(Boolean).join(' ') || `Vehicle ${i + 1}`,
-      year: num(v.year, today.getFullYear() + 1),
+      year: vyear,
       make: vmake, model: v.model || '', trim: v.trim || '',
       luxury: vlux,
       msrp: vmsrp,
@@ -221,14 +227,14 @@ export function normalize(input = {}) {
       buy: {
         enabled: bool(v.buy?.enabled, true),
         rebate: num(v.buy?.rebate, 0),
-        apr: num(v.buy?.apr, 6.5),
+        apr: num(v.buy?.apr, used ? 7.5 : 6.5),
         termMonths: clamp(num(v.buy?.termMonths, 60), 12, 96),
         downPayment: num(v.buy?.downPayment, 0),
         payCash: bool(v.buy?.payCash, false),
         source: v.buy?.source || 'estimate',
       },
       lease: {
-        enabled: bool(v.lease?.enabled, true),
+        enabled: !used && bool(v.lease?.enabled, true),
         monthly: v.lease?.monthly !== undefined && v.lease?.monthly !== '' ? num(v.lease.monthly) : null,
         termMonths: clamp(num(v.lease?.termMonths, 36), 12, 60),
         dueAtSigning: v.lease?.dueAtSigning !== undefined && v.lease?.dueAtSigning !== '' ? num(v.lease.dueAtSigning) : null,
@@ -290,6 +296,13 @@ export function currentValueAt(n, monthsAfterEnd) {
 }
 
 function newValueAt(v, months, annualMiles) {
+  if (v.condition && v.condition !== 'new') {
+    // Used/certified: anchor on what you pay today and follow the curve from its current age.
+    const age0 = v.ageYears || 0;
+    const ratio = retention(age0 + months / 12, v.depreciationSpeed) / retention(age0, v.depreciationSpeed);
+    const extra = (annualMiles - 12000) * (months / 12);
+    return v.sellingPrice * ratio * mileageFactor(extra);
+  }
   const base = v.msrp || v.sellingPrice;
   const extra = (annualMiles - 12000) * (months / 12);
   return base * retention(months / 12, v.depreciationSpeed) * mileageFactor(extra);
@@ -421,14 +434,17 @@ export function buyNewScenario(n, v, H, exit) {
   const insurance = v.insuranceAnnual ?? defaultInsurance(v.sellingPrice);
   operatingCosts(flows, {
     H, annualMiles: a.annualMiles, gasPrice: a.gasPrice, mpg: v.mpg, insuranceAnnual: insurance,
-    maintAt: (m) => maintenanceAnnual(m / 12, { luxury: v.luxury, annualMiles: a.annualMiles }),
-    regAt: (m) => registrationAnnual({ state: a.state, msrp: v.msrp, ageYears: m / 12, flat: v.registrationAnnual }),
+    // Certified cars carry an extended warranty: about 30% less in repairs while it lasts (~2 years).
+    maintAt: (m) => maintenanceAnnual((v.ageYears || 0) + m / 12, { luxury: v.luxury, annualMiles: a.annualMiles }) * (v.condition === 'certified' && m < 24 ? 0.7 : 1),
+    regAt: (m) => registrationAnnual({ state: a.state, msrp: v.msrp, ageYears: (v.ageYears || 0) + m / 12, flat: v.registrationAnnual }),
   });
+  const kindWord = v.condition === 'certified' ? 'certified' : v.condition === 'used' ? 'used' : 'new';
   return finish(flows, a, {
     id: `buy-${v.id}`,
     kind: 'buy',
     candidateId: v.id,
-    title: `${exit.choice === 'trade' ? 'Trade in' : 'Return'} lease → buy new ${v.label}`,
+    title: `${exit.choice === 'trade' ? 'Trade in' : 'Return'} lease → buy ${kindWord} ${v.label}`,
+    condition: v.condition,
     vehicle: v.label,
     upfront: (v.buy.payCash ? price + taxesFees : v.buy.downPayment) - exit.cashAtExit,
     monthlyPayment: loan.payment,

@@ -7,7 +7,7 @@ const today = new Date();
 const blankCandidate = (o = {}) => ({
   id: Math.random().toString(36).slice(2, 8),
   year: String(today.getFullYear() + (today.getMonth() >= 8 ? 1 : 0)), make: '', model: '', trim: '',
-  sellingPrice: '', msrp: '', mpg: '', insuranceAnnual: '',
+  sellingPrice: '', msrp: '', mpg: '', insuranceAnnual: '', condition: 'new', miles: '',
   buy: { enabled: true, rebate: '', apr: '', termMonths: '60', downPayment: '', payCash: false, source: 'estimate' },
   lease: { enabled: true, monthly: '', termMonths: '36', dueAtSigning: '', annualMileage: '', overMileageFee: '', dispositionFee: '', residualPct: '', moneyFactor: '', source: 'estimate' },
   market: null, offers: [], applied: {},
@@ -164,13 +164,22 @@ function candidateHTML(c, i) {
   const p = (k) => `candidates.${i}.${k}`;
   const inp = (k, label, o = {}) => fieldHTML(F(p(k), label, o));
   const m = c.market;
-  const offerChips = (c.offers || []).map((o) => {
-    const kind = o.type === 'lease' ? 'lease' : o.type === 'finance' ? 'finance' : 'cash';
-    const main = kind === 'lease' ? `$${o.monthly}/mo · ${o.term || '?'} mo${o.dueAtSigning != null ? ` · $${o.dueAtSigning.toLocaleString()} down` : ''}`
-      : kind === 'finance' ? `${o.apr}% APR · ${o.term || '?'} mo` : `$${(o.cashback || 0).toLocaleString()} cash back`;
-    const pressed = c.applied?.[kind] === o.id;
-    return `<button type="button" class="offer" data-offer="${i}:${esc(o.id)}" aria-pressed="${pressed}">${esc(main)}<small>${esc((o.vehicles?.[0] || o.title || '').slice(0, 60))}${o.validThrough ? ` · ends ${esc(o.validThrough)}` : ''}</small></button>`;
-  }).join('');
+  const sel = selection(c);
+  const chip = (o) => {
+    const kind = offerKind(o);
+    const main = kind === 'lease' ? `$${o.monthly}/mo for ${o.term || '?'} mo${o.dueAtSigning != null ? `, $${o.dueAtSigning.toLocaleString()} due` : ''}`
+      : kind === 'finance' ? `${o.apr}% APR for ${o.term || '?'} mo` : `$${(o.cashback || 0).toLocaleString()} ${esc(cashLabel(o))}`;
+    const pressed = kind === 'cash' ? sel.cash.includes(o.id) : sel[kind] === o.id;
+    const who = o.group ? `For ${o.group.toLowerCase()}. ` : '';
+    return `<button type="button" class="offer" data-offer="${i}:${esc(o.id)}" aria-pressed="${pressed}">${main}<small>${esc(who)}${esc((o.title || o.vehicles?.[0] || '').slice(0, 60))}${o.validThrough ? `, ends ${esc(o.validThrough)}` : ''}</small></button>`;
+  };
+  const byKind = (k) => (c.offers || []).filter((o) => offerKind(o) === k);
+  const cashTotal = stackedCash(c);
+  const offerChips = (c.offers || []).length ? `
+    ${byKind('cash').length ? `<h5>Cash back <span class="soft">tap any to stack</span></h5><div class="offers">${byKind('cash').map(chip).join('')}</div>
+      <p class="stack-total">${cashTotal ? `Stacking ${money(cashTotal)} in cash` : 'No cash selected'}</p>` : ''}
+    ${byKind('finance').length ? `<h5>Special financing <span class="soft">pick one, stacks with cash</span></h5><div class="offers">${byKind('finance').map(chip).join('')}</div>` : ''}
+    ${byKind('lease').length ? `<h5>Lease deals <span class="soft">pick one</span></h5><div class="offers">${byKind('lease').map(chip).join('')}</div>` : ''}` : '';
   return `<div class="cand" data-cand="${i}">
     <div class="ymmt">
       ${inp('year', 'Year', { inputmode: 'numeric' })}${inp('make', 'Make', { text: true })}${inp('model', 'Model', { text: true })}${inp('trim', 'Trim', { text: true, placeholder: 'Any' })}
@@ -180,20 +189,21 @@ function candidateHTML(c, i) {
       ${inp('sellingPrice', azEligible(c) && planPct() ? 'Street price (before A/Z-Plan)' : 'Price you’d pay', { pre: '$' })}${inp('msrp', 'MSRP', { pre: '$' })}
       ${inp('mpg', 'Combined MPG', { placeholder: '30' })}${inp('insuranceAnnual', 'Insurance per year', { pre: '$', placeholder: c.sellingPrice ? `≈ ${defaultInsurance(Number(c.sellingPrice))}` : '' })}
     </div>
-    ${offerChips ? `<h4>Manufacturer offers near you</h4><p class="hint">Tap one to use it. Offers are often for a specific trim; check the fine print.</p><div class="offers">${offerChips}</div>` : ''}
+    ${offerChips ? `<h4>Manufacturer offers near you</h4><p class="hint">Everything you select stacks. Offers can be trim-specific or need proof of eligibility, so confirm the combination with the dealer.</p>${offerChips}` : ''}
     <h4><label><input type="checkbox" data-path="${p('buy.enabled')}" ${c.buy.enabled ? 'checked' : ''}> Buy it</label>${c.buy.source !== 'estimate' ? '<span class="tag offer-tag">offer applied</span>' : ''}</h4>
     <div class="grid" ${c.buy.enabled ? '' : 'hidden'}>
       ${inp('buy.rebate', 'Rebate / cash back', { pre: '$', placeholder: '0' })}${inp('buy.apr', 'Loan APR', { suf: '%', placeholder: '6.5' })}
       ${inp('buy.termMonths', 'Loan term', { suf: 'mo' })}${inp('buy.downPayment', 'Down payment', { pre: '$', placeholder: '0' })}
       ${fieldHTML(F(p('buy.payCash'), 'Pay cash', { check: true }))}
     </div>
-    <h4><label><input type="checkbox" data-path="${p('lease.enabled')}" ${c.lease.enabled ? 'checked' : ''}> Lease it</label>${c.lease.source !== 'estimate' ? '<span class="tag offer-tag">offer applied</span>' : ''}</h4>
+    ${c.condition && c.condition !== 'new' ? '' : `<h4><label><input type="checkbox" data-path="${p('lease.enabled')}" ${c.lease.enabled ? 'checked' : ''}> Lease it</label>${c.lease.source !== 'estimate' ? '<span class="tag offer-tag">offer applied</span>' : ''}</h4>
     <div class="grid" ${c.lease.enabled ? '' : 'hidden'}>
       ${inp('lease.monthly', 'Monthly payment (before tax)', { pre: '$', placeholder: 'estimate', hint: 'Blank = estimated from price' })}${inp('lease.termMonths', 'Lease term', { suf: 'mo' })}
       ${inp('lease.dueAtSigning', 'Due at signing', { pre: '$', placeholder: 'first month + fees' })}${inp('lease.annualMileage', 'Miles allowed per year', { suf: 'mi', placeholder: '12000' })}
       ${inp('lease.overMileageFee', 'Over-mileage charge', { pre: '$', suf: '/mi', placeholder: '0.25' })}${inp('lease.dispositionFee', 'Turn-in fee', { pre: '$', placeholder: '395' })}
       ${inp('lease.residualPct', 'Residual (for estimate)', { suf: '%', placeholder: '58' })}${inp('lease.moneyFactor', 'Money factor (for estimate)', { placeholder: '0.0025' })}
-    </div>
+    </div>`}
+    ${c.condition && c.condition !== 'new' ? `<div class="grid" style="margin-top:12px">${inp('miles', 'Odometer', { suf: 'mi' })}</div>` : ''}
   </div>`;
 }
 
@@ -282,7 +292,9 @@ async function uploadPhoto(file) {
 
 // ---------- Compare models screen ----------
 const openEditors = new Set();
-const carName = (c) => [c.make, c.model].filter(Boolean).join(' ') || 'New car';
+const carName = (c) => (c.condition && c.condition !== 'new'
+  ? `${c.condition === 'certified' ? 'Certified' : 'Used'} ${[c.year, c.make, c.model].filter(Boolean).join(' ')}`
+  : [c.make, c.model].filter(Boolean).join(' ')) || 'New car';
 const curLabel = () => [state.current.make, state.current.model].filter(Boolean).join(' ') || 'current car';
 
 function modelRows() {
@@ -300,23 +312,19 @@ function modelRows() {
 }
 
 function offerSummary(c) {
-  const o = c.offers || [];
-  if (!o.length) return '';
-  const cash = Math.max(0, ...o.filter((x) => x.type === 'cash' && !x.group).map((x) => x.cashback || 0));
-  const apr = o.filter((x) => x.type === 'finance' && x.apr != null).sort((a, b) => a.apr - b.apr)[0];
-  const lease = o.filter((x) => x.type === 'lease' && x.monthly).sort((a, b) => a.monthly - b.monthly)[0];
-  const parts = [];
-  if (cash) parts.push(`${money(cash)} cash back`);
-  if (apr) parts.push(`${apr.apr}% APR for ${apr.term} mo`);
-  if (lease) parts.push(`lease from $${lease.monthly}/mo`);
-  const loyalty = o.filter((x) => x.type === 'cash' && x.group).reduce((m, x) => Math.max(m, x.cashback || 0), 0);
-  if (loyalty) parts.push(`up to ${money(loyalty)} more for qualifying owners`);
-  return `Offers: ${parts.join(', ')}.`;
+  if (!(c.offers || []).length) return '';
+  const sel = selection(c);
+  const n = (c.offers || []).length;
+  const lease = (c.offers || []).find((o) => o.id === sel.lease);
+  const picked = [c.buyNote, lease ? `Lease: $${lease.monthly}/mo for ${lease.term} mo.` : ''].filter(Boolean).join(' ');
+  return `${picked || 'No offers selected.'} ${n} offer${n === 1 ? '' : 's'} available; change them in Price, offers and terms.`;
 }
 
 function summaryHTML(x, buyout) {
   const { c, i, buy, lease, best } = x;
-  const sub = [c.year || 'New', c.trim].filter(Boolean).join(' ') + (c.reason ? `. ${c.reason}` : '');
+  const sub = (c.condition && c.condition !== 'new'
+    ? [c.miles ? `about ${Number(c.miles).toLocaleString()} mi` : '', c.trim].filter(Boolean).join(', ')
+    : [c.year || 'New', c.trim].filter(Boolean).join(' ')) + (c.reason ? `${c.condition && c.condition !== 'new' && c.miles ? '. ' : c.condition && c.condition !== 'new' ? '' : '. '}${c.reason}` : '');
   const remove = `<button type="button" class="btn ghost small" data-remove="${i}">Remove</button>`;
   if (!best) {
     return `<header class="mc-h"><div class="mc-pic">${imgHTML(photoOf(c), carName(c), phCls(c.photo?.cutout ? c.photo : null))}</div><div class="mc-name"><b>${esc(carName(c))}</b><small>${esc(sub)}</small></div></header>
@@ -336,7 +344,7 @@ function summaryHTML(x, buyout) {
       <div><dt>${plan}</dt><dd>${money(eff)}</dd><p>MSRP ${money(Number(c.msrp) || null)}</p></div>
       <div><dt>Fuel economy</dt><dd>${c.mpg ? `${esc(c.mpg)}<small> mpg</small>` : '—'}</dd><p>${c.market?.count ? `${c.market.count.toLocaleString()} for sale near you` : '&nbsp;'}</p></div>
     </dl>
-    ${offerSummary(c) ? `<p class="mc-offers">${esc(offerSummary(c))}${c.buyNote ? ` ${esc(c.buyNote)}` : ''}</p>` : ''}
+    ${offerSummary(c) ? `<p class="mc-offers">${esc(offerSummary(c))}</p>` : ''}
     ${c.status && c.statusErr ? `<p class="status err">${esc(c.status)}</p>` : ''}
     <div class="mc-actions"><button type="button" class="btn small" data-price="${i}">Refresh prices</button>${remove}</div>`;
 }
@@ -450,6 +458,7 @@ function renderResults() {
   }
 
   const best = r.scenarios[0];
+  state.lastVerdict = verdictShort(best);
   const v = r.verdict;
   const eq = r.equity;
   const stickerFresh = renderResults.lastHeadline !== v.headline;
@@ -492,7 +501,14 @@ function renderResults() {
       <p class="fine">“All in” is the true cost of driving: payments, interest, taxes, insurance, fuel, maintenance and lost value, minus what the car is worth when you’re done.</p>
     </article>
 
+    ${repriceBannerHTML()}
+    <div class="verdict-actions">
+      <button type="button" class="btn small" data-act="share"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6h14v-6"></path></svg>Share this decision</button>
+      <button type="button" class="btn small ghost" data-act="reprice">Re-check prices now</button>
+    </div>
     ${r.warnings.length ? `<div class="warns">${r.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join('')}</div>` : ''}
+
+    ${timelineHTML()}
 
     <section class="panel"><h2>Your lease equity</h2>
       <p class="sub">${eq.monthsToEnd >= 1 ? `Projected to lease end in ${Math.round(eq.monthsToEnd)} months at ${Math.round(eq.milesAtEnd).toLocaleString()} miles. ` : ''}Positive equity is money you keep by buying out or trading in instead of returning the car.</p>
@@ -514,6 +530,91 @@ function renderResults() {
     ${recalls.length ? `<section class="panel"><h2>Recalls on your car</h2>${recalls.map((x) => `<div class="recall"><b>${esc(x.title || x.id || 'Recall')}${x.status ? ` (${esc(x.status)})` : ''}</b><p>${esc(x.description || '')}</p>${x.remedy ? `<p>Fix: ${esc(x.remedy)}</p>` : ''}</div>`).join('')}</section>` : ''}
 
     <p class="sources">${sourcesLine()}</p>`;
+}
+
+// ---------- Re-pricing notice, decide-by timeline, reminders, sharing ----------
+function repriceBannerHTML() {
+  const n = state.repriceNotice;
+  const when = state.repricedAt ? new Date(state.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null;
+  if (n && n.at && n.before && n.after && n.before !== n.after) {
+    return `<div class="notice changed" role="status"><b>The answer changed.</b> Prices re-checked ${esc(when || '')}: it was “${esc(n.before)}”, now “${esc(n.after)}”. <button type="button" class="linkish" data-act="dismiss">Got it</button></div>`;
+  }
+  return when ? `<p class="checked">Prices and offers re-checked ${esc(when)}${n?.after ? `, still “${esc(n.after)}”` : ''}. They refresh automatically, more often as the deadline gets close.</p>` : '';
+}
+
+const MILESTONES = [
+  { days: 90, title: 'Get a fresh payoff quote', text: 'Ask the leasing company for a lease-end payoff quote and update the buyout price in the app.' },
+  { days: 60, title: 'Check the numbers', text: 'Prices and manufacturer offers have been re-checked. Open the app to see if the answer changed.' },
+  { days: 30, title: 'Book the pre-return inspection', text: 'If you might return it, book the free pre-return inspection so wear charges aren’t a surprise. Shop the offers you like.' },
+  { days: 7, title: 'Decide', text: 'Final numbers are in the app. Bring the payoff quote and the offer details to the dealer or leasing company.' },
+];
+function milestoneDates(p) {
+  const end = p.current.leaseEndDate;
+  if (!end) return [];
+  const e = new Date(`${end}T12:00:00`);
+  return [...MILESTONES.map((m) => ({ ...m, date: new Date(e.getTime() - m.days * 86400000) })), { days: 0, title: 'Lease ends', text: 'Last day of the lease.', date: e }];
+}
+function timelineHTML() {
+  const ms = milestoneDates(state);
+  if (!ms.length) return `<section class="panel"><h2>Between now and the deadline</h2><p class="sub">Add the lease end date on the Your car tab to get a timeline and reminders.</p></section>`;
+  const now = Date.now();
+  return `<section class="panel"><h2>Between now and the deadline</h2>
+    <ol class="timeline">${ms.map((m) => `<li class="${m.date.getTime() < now ? 'past' : ''}"><span class="t-when">${m.days ? `${m.days} days out` : 'Lease ends'}<small>${m.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</small></span><span><b>${esc(m.title)}</b><br>${esc(m.text)}</span></li>`).join('')}</ol>
+    <button type="button" class="btn small" data-act="ics"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"></rect><path d="M3.5 10h17M8 3v4M16 3v4"></path></svg>Add reminders to my calendar</button>
+  </section>`;
+}
+function downloadReminders() {
+  const ms = milestoneDates(state).filter((m) => m.date.getTime() > Date.now() - 86400000);
+  if (!ms.length) { toast('No upcoming dates to remind you about.'); return; }
+  const pad = (n) => String(n).padStart(2, '0');
+  const ymd = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const link = location.origin + location.pathname;
+  const escI = (t) => String(t).replace(/[\\;,]/g, (c) => `\\${c}`).replace(/\n/g, '\\n');
+  const name = profileName(state);
+  const events = ms.map((m, i) => [
+    'BEGIN:VEVENT',
+    `UID:${store.active}-${m.days}-${ymd(m.date)}@lease-buyout-advisor`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART:${ymd(m.date)}T090000`,
+    'DURATION:PT30M',
+    `SUMMARY:${escI(`${name}: ${m.title}`)}`,
+    `DESCRIPTION:${escI(`${m.text}\n${m.days ? `${m.days} days until the lease ends.` : ''}\n${link}`)}`,
+    `URL:${link}`,
+    'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${escI(m.title)}`, 'TRIGGER:-PT0M', 'END:VALARM',
+    'END:VEVENT',
+  ].join('\r\n'));
+  void events;
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Lease Buyout Advisor//EN', 'CALSCALE:GREGORIAN', ...events, 'END:VCALENDAR'].join('\r\n');
+  const url = URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: `${name.replace(/[^\w]+/g, '-')}-reminders.ics` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+async function shareDecision() {
+  try {
+    persist();
+    await new Promise((r) => setTimeout(r, 1400)); // let the latest numbers save first
+    const res = await fetch('api/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profileId: store.active }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || 'Couldn’t make a share link.');
+    const url = new URL(body.url, location.href).href;
+    const title = `${profileName(state)}: lease decision`;
+    if (navigator.share) { try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    await navigator.clipboard.writeText(url);
+    toast('Share link copied. It shows this car’s decision only, without the VIN.');
+  } catch (e) { toast(e.message); }
+}
+async function repriceNow() {
+  toast('Re-checking prices and offers…');
+  try {
+    persist();
+    await new Promise((r) => setTimeout(r, 1400));
+    const res = await fetch('api/reprice-now', { method: 'POST' });
+    if (!res.ok) throw new Error('Couldn’t re-check right now.');
+    await reloadFromServer('Prices and offers re-checked.');
+    refreshUsage();
+  } catch (e) { toast(e.message); }
 }
 
 function sourcesLine() {
@@ -611,16 +712,19 @@ let saveTimer;
 function snapshot() {
   const profiles = {};
   for (const [id, p] of Object.entries(store.profiles)) {
-    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, assumptions: p.assumptions, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
+    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
   }
-  return JSON.stringify({ active: store.active, profiles });
+  return JSON.stringify({ active: store.active, rev: store.rev || 0, profiles });
 }
 function persist() {
   const snap = snapshot();
   try { localStorage.setItem(STORAGE_KEY, snap); } catch {}
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    fetch('api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: snap }).catch(() => {});
+  saveTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: snap });
+      if (res.status === 409) await reloadFromServer('Prices were just re-checked on the server, so the latest numbers were loaded.');
+    } catch {}
   }, 1200);
 }
 
@@ -633,6 +737,8 @@ function hydrate(p) {
     segment: p.segment || '',
     photo: p.photo || null,
     suggested: !!p.suggested,
+    lastVerdict: p.lastVerdict || null, repricedAt: p.repricedAt || null, repriceLog: p.repriceLog || null,
+    needsVerdictCheck: !!p.needsVerdictCheck, repriceNotice: p.repriceNotice || null,
     assumptions: { ...b.assumptions, ...p.assumptions },
     current: { ...b.current, ...p.current },
     candidates: (p.candidates || []).map((c) => blankCandidate({ ...c, buy: { ...blankCandidate().buy, ...c.buy }, lease: { ...blankCandidate().lease, ...c.lease } })),
@@ -645,6 +751,7 @@ async function restore() {
   try { saved = await api('api/profile'); } catch {}
   if (!saved) { try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || localStorage.getItem('lba:v1') || 'null'); } catch {} }
   if (saved && saved.current && !saved.profiles) saved = { active: 'p1', profiles: { p1: { name: 'My car', ...saved } } }; // old single-car format
+  store.rev = saved?.rev || 0;
   if (saved && saved.profiles && Object.keys(saved.profiles).length) {
     store.profiles = Object.fromEntries(Object.entries(saved.profiles).map(([id, p]) => [id, hydrate(p)]));
     store.active = store.profiles[saved.active] ? saved.active : Object.keys(store.profiles)[0];
@@ -653,6 +760,42 @@ async function restore() {
     store.profiles[store.active] = blankProfile('My car');
   }
   state = store.profiles[store.active];
+  afterLoad();
+}
+
+// After loading: re-pick offers the server refreshed, and note whether the answer changed.
+function afterLoad() {
+  for (const p of Object.values(store.profiles)) {
+    for (const c of p.candidates) if (c.needsPick) { const keep = state; state = p; autoPick(c); state = keep; delete c.needsPick; }
+    if (p.needsVerdictCheck) {
+      const v = profileVerdict(p);
+      const now = v ? v.short : null;
+      p.repriceNotice = { at: p.repricedAt, before: p.lastVerdict || null, after: now };
+      p.lastVerdict = now;
+      p.needsVerdictCheck = false;
+    }
+  }
+}
+
+async function reloadFromServer(msg) {
+  try {
+    const saved = await api('api/profile');
+    if (!saved?.profiles) return;
+    store.rev = saved.rev || 0;
+    store.profiles = Object.fromEntries(Object.entries(saved.profiles).map(([id, p]) => [id, hydrate(p)]));
+    if (!store.profiles[store.active]) store.active = Object.keys(store.profiles)[0];
+    state = store.profiles[store.active];
+    afterLoad();
+    renderAll();
+    if (msg) toast(msg);
+  } catch {}
+}
+
+function toast(msg) {
+  let t = $('#toast');
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 5000);
 }
 
 function profileName(p) {
@@ -692,13 +835,16 @@ function deadlineText(p) {
   return `Decide by ${fmtDate(p.current.leaseEndDate)}, ${n} day${n === 1 ? '' : 's'} left`;
 }
 
+function verdictShort(best) {
+  const name = best.vehicle.split(' ').filter((w) => !/^\d{4}$/.test(w)).slice(1).join(' ') || best.vehicle;
+  return best.kind === 'buyout' ? 'Buy out' : best.kind === 'lease' ? `Lease ${name}` : `Buy ${best.condition && best.condition !== 'new' ? `${best.condition} ` : ''}${name}`;
+}
 function profileVerdict(p) {
   try {
     const r = analyze(analysisInput(p.candidates, {}, p));
     const best = r.scenarios[0];
     if (!best) return null;
-    const short = best.kind === 'buyout' ? 'Buy out' : best.kind === 'lease' ? `Lease ${best.vehicle.split(' ').slice(-2).join(' ')}` : `Buy ${best.vehicle.split(' ').slice(-2).join(' ')}`;
-    return { short, perMonth: best.perMonth, compared: r.scenarios.length - 1 };
+    return { short: verdictShort(best), perMonth: best.perMonth, compared: r.scenarios.length - 1 };
   } catch { return null; }
 }
 
@@ -759,7 +905,7 @@ function showStep(n) {
 }
 function startAdd() {
   if ($('#garage').open) $('#garage').close();
-  Object.assign(draft, { step: 1, lookup: null });
+  Object.assign(draft, { step: 1, lookup: null, payoffExtras: null });
   for (const id of ['newName', 'newVin', 'newPlate', 'newMiles', 'newBuyout', 'newEnd', 'newAllowed', 'newPayment']) $(`#${id}`).value = '';
   $('#newZip').value = state.assumptions.zip || '';
   const opts = STATES.map((x) => `<option ${x === state.assumptions.state ? 'selected' : ''}>${x}</option>`).join('');
@@ -838,6 +984,7 @@ function step3() {
     marketValue: draft.value ? String(Math.round(draft.value.marketValue)) : '', msrp: draft.value?.msrp ? String(Math.round(draft.value.msrp)) : '',
     currentMiles: String(draft.miles), buyoutPrice: String(buyout), leaseEndDate: $('#newEnd').value || '',
     allowedMiles: String($('#newAllowed').value).replace(/[^\d]/g, ''), monthlyPayment: String($('#newPayment').value).replace(/[^\d.]/g, ''),
+    ...Object.fromEntries(Object.entries(draft.payoffExtras || {}).filter(([, v]) => v !== '')),
   };
   p.lookup = draft.lookup;
   p.photo = draft.photo || null;
@@ -846,6 +993,95 @@ function step3() {
   $('#addCar').close();
   switchProfile(id); // runs suggestions for the new car
   setTab('verdict');
+}
+
+// ---------- Reading photos: VIN and payoff letter ----------
+async function photoToJpeg(file, max = 1600) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  return { dataUrl: cv.toDataURL('image/jpeg', 0.88), bmp };
+}
+async function readImageApi(kind, dataUrl) {
+  const res = await fetch('api/read-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind, dataUrl }) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Couldn’t read the photo (${res.status}).`);
+  return body;
+}
+// VIN check digit (North American VINs).
+function vinValid(v) {
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(v)) return false;
+  const map = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9, S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9 };
+  const w = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+  const sum = [...v].reduce((t, ch, i) => t + (/\d/.test(ch) ? Number(ch) : map[ch]) * w[i], 0);
+  const check = sum % 11 === 10 ? 'X' : String(sum % 11);
+  return v[8] === check;
+}
+let zxingLoad;
+function loadZxing() {
+  zxingLoad ||= new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'vendor/zxing.js'; sc.onload = () => res(window.ZXing); sc.onerror = rej; document.head.appendChild(sc); });
+  return zxingLoad;
+}
+// Try the barcode first (door-jamb Code 39, windshield Data Matrix), in a few sizes and rotations.
+async function decodeVinBarcode(bmp) {
+  const Z = await loadZxing();
+  const hints = new Map();
+  hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.DATA_MATRIX, Z.BarcodeFormat.QR_CODE, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.PDF_417]);
+  hints.set(Z.DecodeHintType.TRY_HARDER, true);
+  const reader = new Z.MultiFormatReader(); reader.setHints(hints);
+  for (const max of [1400, 900, 2000]) for (const rot of [0, 90]) {
+    const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * k), h = Math.round(bmp.height * k);
+    const cv = document.createElement('canvas');
+    cv.width = rot ? h : w; cv.height = rot ? w : h;
+    const cx = cv.getContext('2d');
+    if (rot) { cx.translate(h, 0); cx.rotate(Math.PI / 2); }
+    cx.drawImage(bmp, 0, 0, w, h);
+    try {
+      const res = reader.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv))));
+      const m = /[A-HJ-NPR-Z0-9]{17}/.exec(String(res.getText()).toUpperCase().replace(/^I(?=[A-HJ-NPR-Z0-9]{17}$)/, ''));
+      if (m) return m[0];
+    } catch {}
+  }
+  return null;
+}
+async function scanVin(file) {
+  stepStatus(1, 'Reading the VIN…');
+  try {
+    const { dataUrl, bmp } = await photoToJpeg(file, 2000);
+    let vin = await decodeVinBarcode(bmp).catch(() => null);
+    let how = 'barcode';
+    if (!vin) { const r = await readImageApi('vin', dataUrl); vin = r.vin ? String(r.vin).toUpperCase().replace(/[^A-Z0-9]/g, '') : null; how = 'text'; }
+    if (!vin) throw new Error('Couldn’t find a VIN in that photo. Try closer, with the label filling the frame, or type it in.');
+    $('#newVin').value = vin;
+    if (vinValid(vin)) { stepStatus(1, `Read the VIN from the ${how}. Looking it up…`); step1(); }
+    else stepStatus(1, `Read ${vin} from the ${how}, but it doesn’t pass the VIN check. Fix any wrong character, then tap Look up.`, true);
+  } catch (e) { stepStatus(1, e.message, true); }
+}
+async function readPayoff(file, target) {
+  const say = (m, err) => (target === 'draft' ? stepStatus(3, m, err) : (($('#carStatus').className = `status${err ? ' err' : ''}`), ($('#carStatus').textContent = m)));
+  say('Reading the payoff letter…');
+  try {
+    const { dataUrl } = await photoToJpeg(file, 1800);
+    const r = await readImageApi('payoff', dataUrl);
+    const num = (x) => (x == null || x === '' || Number.isNaN(Number(x)) ? '' : String(Math.round(Number(x) * 100) / 100));
+    const found = [];
+    if (target === 'draft') {
+      if (r.buyoutPrice) { $('#newBuyout').value = num(r.buyoutPrice); found.push(`buyout ${money(Number(r.buyoutPrice))}`); }
+      if (r.leaseEndDate) { $('#newEnd').value = r.leaseEndDate; found.push(`lease ends ${fmtDate(r.leaseEndDate)}`); }
+      if (r.milesAllowed) { $('#newAllowed').value = num(r.milesAllowed); found.push(`${Number(r.milesAllowed).toLocaleString()} miles allowed`); }
+      if (r.monthlyPayment) { $('#newPayment').value = num(r.monthlyPayment); found.push(`payment ${money(Number(r.monthlyPayment))}`); }
+      draft.payoffExtras = { purchaseOptionFee: num(r.purchaseOptionFee), excessMileRate: num(r.excessMileRate), dispositionFee: num(r.dispositionFee) };
+    } else {
+      fillCurrent({ buyoutPrice: num(r.buyoutPrice), leaseEndDate: r.leaseEndDate || '', allowedMiles: num(r.milesAllowed), monthlyPayment: num(r.monthlyPayment), purchaseOptionFee: num(r.purchaseOptionFee), excessMileRate: num(r.excessMileRate), dispositionFee: num(r.dispositionFee) });
+      ['buyoutPrice', 'leaseEndDate', 'allowedMiles', 'monthlyPayment'].forEach((k) => { if (state.current[k]) found.push(k); });
+      scheduleResults();
+    }
+    if (!found.length) throw new Error('Couldn’t find the lease numbers in that photo. Try a clearer shot of the payoff page.');
+    say(`Read from the letter${r.lessor ? ` (${r.lessor})` : ''}: ${target === 'draft' ? found.join(', ') : 'buyout, dates and fees filled in'}. Check them before you continue.${r.notes ? ` Note: ${r.notes}` : ''}${r.payoffGoodThrough ? ` Quote good through ${fmtDate(r.payoffGoodThrough)}.` : ''}`);
+  } catch (e) { say(e.message, true); }
 }
 
 // ---------- Suggestions ----------
@@ -859,30 +1095,47 @@ function suggestionList(p = state) {
   return items.filter((x) => !have.has(`${x.make}|${x.model}`.toLowerCase()));
 }
 
+// Gently used versions of the top suggestions: certified ~1 year old, used ~2 years old.
+function usedSuggestionList(p = state) {
+  const now = new Date();
+  const newest = now.getFullYear() + (now.getMonth() >= 8 ? 1 : 0);
+  const base = suggestionList(p).filter((x) => x.make && x.model).slice(0, 3);
+  const have = new Set(p.candidates.map((c) => `${c.condition || 'new'}|${c.year}|${c.make}|${c.model}`.toLowerCase()));
+  const out = [];
+  base.forEach((x, k) => {
+    out.push({ make: x.make, model: x.model, condition: 'certified', year: String(newest - 2), reason: 'About a year old, with a factory-backed warranty' });
+    if (k < 2) out.push({ make: x.make, model: x.model, condition: 'used', year: String(newest - 3), reason: 'Two years old: someone else took the biggest drop in value' });
+  });
+  return out.filter((x) => !have.has(`${x.condition}|${x.year}|${x.make}|${x.model}`.toLowerCase()));
+}
+
 function addSuggestion(x, { price = true } = {}) {
-  state.candidates.push(blankCandidate({ year: '', make: x.make, model: x.model, reason: x.reason }));
+  state.candidates.push(blankCandidate({ year: x.year || '', make: x.make, model: x.model, reason: x.reason, condition: x.condition || 'new' }));
   if (price) priceCandidate(state.candidates.length - 1);
 }
 
 function autoSuggest(n = 5) {
   state.suggested = true;
-  const list = suggestionList().slice(0, n);
+  const list = [...suggestionList().slice(0, n), ...usedSuggestionList().filter((x) => x.condition === 'certified').slice(0, 1)];
   if (!list.length) return;
   for (const x of list) addSuggestion(x, { price: false });
   renderModels(); persist();
-  $('#modelsStatus').textContent = `Suggested ${list.map((x) => `${x.make} ${x.model}`).join(', ')}. Getting prices…`;
+  $('#modelsStatus').textContent = `Suggested ${list.map((x) => carName(x)).join(', ')}. Getting prices…`;
   priceAll(true);
 }
 
 function renderIdeas() {
-  const list = suggestionList().slice(0, 8);
+  const fresh = suggestionList().slice(0, 8);
+  const used = usedSuggestionList().slice(0, 5);
   const el = $('#ideas');
-  if (!list.length) { el.innerHTML = ''; return; }
-  el.innerHTML = `<h3 class="ideas-h">Suggested for your ${esc(state.current.model)}</h3><div class="ideas">${list.map((x, i) => `<button type="button" class="idea" data-idea="${i}"><b>+ ${esc(x.make)} ${esc(x.model)}</b><small>${esc(x.reason)}</small></button>`).join('')}</div>`;
+  if (!fresh.length && !used.length) { el.innerHTML = ''; return; }
+  const chips = (list, tag) => list.map((x, i) => `<button type="button" class="idea" data-idea="${tag}:${i}"><b>+ ${esc(carName(x))}</b><small>${esc(x.reason)}</small></button>`).join('');
+  el.innerHTML = `${fresh.length ? `<h3 class="ideas-h">New, suggested for your ${esc(state.current.model)}</h3><div class="ideas">${chips(fresh, 'n')}</div>` : ''}
+    ${used.length ? `<h3 class="ideas-h">Gently used and certified</h3><div class="ideas">${chips(used, 'u')}</div>` : ''}`;
   el.onclick = (e) => {
     const b = e.target.closest('[data-idea]'); if (!b) return;
-    const x = list[Number(b.dataset.idea)];
-    addSuggestion(x);
+    const [tag, i] = b.dataset.idea.split(':');
+    addSuggestion((tag === 'u' ? used : fresh)[Number(i)]);
   };
 }
 
@@ -993,15 +1246,17 @@ async function priceCandidate(i, { render = true } = {}) {
   if (!c.make || !c.model) { c.status = 'Enter at least a make and model.'; c.statusErr = true; if (render) renderModels(); return; }
   c.status = 'Checking dealer prices and manufacturer offers…'; c.statusErr = false;
   if (render) renderModels();
-  const q = new URLSearchParams({ year: c.year || '', make: c.make, model: c.model, trim: c.trim || '', zip: state.assumptions.zip || '' });
-  const [market, inc] = await Promise.allSettled([api(`api/new-market?${q}`), api(`api/incentives?${q}`)]);
+  const used = c.condition && c.condition !== 'new';
+  const q = new URLSearchParams({ year: c.year || '', make: c.make, model: c.model, trim: c.trim || '', zip: state.assumptions.zip || '', car_type: c.condition || 'new', max_miles: used ? String(Math.max(20000, (new Date().getFullYear() + 1 - Number(c.year || 0)) * 15000)) : '' });
+  const [market, inc] = await Promise.allSettled([api(`api/new-market?${q}`), used ? Promise.resolve({ offers: [], errors: [] }) : api(`api/incentives?${q}`)]);
   const notes = [];
   if (market.status === 'fulfilled') {
     const m = market.value; c.market = m;
     if (m.medianPrice) c.sellingPrice = String(m.medianPrice);
     if (m.medianMsrp) c.msrp = String(m.medianMsrp); else if (!c.msrp && m.medianPrice) c.msrp = String(m.medianPrice);
     if (m.mpg && !c.mpg) c.mpg = String(m.mpg);
-    if (!m.medianPrice) notes.push('No new ones for sale near you. Enter a price to include it.');
+    if (used && m.medianMiles) c.miles = String(m.medianMiles);
+    if (!m.medianPrice) notes.push(`No ${used ? c.condition : 'new'} ones for sale near you. Enter a price to include it.`);
     for (const e of m.errors || []) if (!m.source) notes.push(`${e.provider}: ${e.message}`);
   } else notes.push(market.reason.message);
   if (inc.status === 'fulfilled') {
@@ -1015,40 +1270,82 @@ async function priceCandidate(i, { render = true } = {}) {
   if (render) { renderResults(); renderModels(); persist(); refreshUsage(); ensurePhotos(); }
 }
 
-// Pick the cheapest way to use the offers: cash back vs. special APR, and the best lease.
+// ---------- Offers: everything selected stacks ----------
+const offerKind = (o) => (o.type === 'lease' ? 'lease' : o.type === 'finance' ? 'finance' : 'cash');
+const offerText = (o) => `${o.title || ''} ${o.group || ''} ${o.disclaimer || ''}`;
+const pgmsOf = (o) => [...new Set((offerText(o).match(/#\s?\d{4,6}/g) || []).map((x) => x.replace(/\D/g, '')))];
+const isAffinity = (o) => /military|first responder|student|college|educator|nurse|affinity/i.test(offerText(o));
+const isConquest = (o) => /conquest|competitive/i.test(offerText(o));
+const isLoyalty = (o) => !isConquest(o) && /owner|lessee|loyal|renewal|\bRCL\b/i.test(`${o.title || ''} ${o.group || ''}`);
+function cashLabel(o) {
+  const t = `${o.title || ''} ${o.group || ''}`;
+  if (/renewal|\bRCL\b/i.test(t)) return 'lease renewal';
+  if (isAffinity(o)) return (o.group || 'affinity').toLowerCase().replace(/ personnel$/, '');
+  if (/\+/.test(o.title || '')) return 'combined cash';
+  if (isLoyalty(o)) return 'owner loyalty';
+  if (isConquest(o)) return 'conquest';
+  if (/bonus/i.test(t)) return 'bonus cash';
+  return 'cash back';
+}
+function selection(c) {
+  c.selected ||= { cash: [], finance: null, lease: null };
+  c.selected.cash ||= [];
+  return c.selected;
+}
+function stackedCash(c) {
+  const ids = new Set(selection(c).cash);
+  return (c.offers || []).filter((o) => offerKind(o) === 'cash' && ids.has(o.id)).reduce((t, o) => t + (o.cashback || 0), 0);
+}
+// Default cash: everything you likely qualify for, each manufacturer program counted once.
+function defaultCash(c) {
+  const sameBrand = String(c.make).toLowerCase() === String(state.current.make).toLowerCase();
+  const cash = (c.offers || []).filter((o) => offerKind(o) === 'cash' && o.cashback > 0)
+    .filter((o) => !isAffinity(o) && (!isLoyalty(o) || sameBrand) && (!isConquest(o) || !sameBrand))
+    .sort((a, b) => pgmsOf(a).length - pgmsOf(b).length || b.cashback - a.cashback);
+  const covered = new Set(), titles = new Set(), picked = [];
+  for (const o of cash) {
+    const p = pgmsOf(o);
+    const key = `${cashLabel(o)}|${o.cashback}`;
+    if (p.length ? p.some((x) => covered.has(x)) : titles.has(key)) continue;
+    p.forEach((x) => covered.add(x)); titles.add(key);
+    picked.push(o.id);
+  }
+  return picked;
+}
+// Push the current selection into the buy/lease numbers the engine uses.
+function applySelection(c) {
+  const sel = selection(c);
+  const total = stackedCash(c);
+  const fin = (c.offers || []).find((o) => o.id === sel.finance);
+  c.buy = { ...c.buy, rebate: total ? String(total) : '', apr: fin ? String(fin.apr) : '', termMonths: fin ? String(fin.term || 60) : '60', source: total || fin ? 'offer' : 'estimate' };
+  const lease = (c.offers || []).find((o) => o.id === sel.lease);
+  if (lease) applyLeaseOffer(c, lease);
+  const parts = (c.offers || []).filter((o) => sel.cash.includes(o.id)).map((o) => `${money(o.cashback)} ${cashLabel(o)}`);
+  c.buyNote = parts.length || fin ? `Using ${[parts.join(' + '), fin ? `${fin.apr}% for ${fin.term} months` : ''].filter(Boolean).join(', plus ')}.` : '';
+}
+// Defaults: stack all eligible cash, then whichever APR (or none) costs least with it, and the cheapest lease.
 function autoPick(c) {
-  const offers = c.offers || [];
-  const cost = (variant, kind) => {
-    const r = analyze(analysisInput([variant]));
-    return r.scenarios.find((s) => s.kind === kind)?.pvCost ?? Infinity;
-  };
-  const baseBuy = { ...c.buy, enabled: true };
-  const cash = offers.filter((o) => o.type === 'cash' && !o.group && o.cashback).sort((a, b) => b.cashback - a.cashback)[0];
-  const aprs = offers.filter((o) => o.type === 'finance' && o.apr != null);
-  const variants = [{ buy: { ...baseBuy, rebate: '', apr: '6.5', termMonths: '60' }, applied: {}, note: '' }];
-  if (cash) variants.push({ buy: { ...baseBuy, rebate: String(cash.cashback), apr: '6.5', termMonths: '60' }, applied: { cash: cash.id }, note: `Using ${money(cash.cashback)} cash back with a 6.5% loan; it beat the special APRs.` });
-  for (const o of aprs) variants.push({ buy: { ...baseBuy, rebate: '', apr: String(o.apr), termMonths: String(o.term || 60) }, applied: { finance: o.id }, note: `Using ${o.apr}% for ${o.term} months; it beat taking the cash back.` });
-  let bestBuy = null;
-  for (const v of variants) {
-    const pv = cost({ ...c, buy: v.buy, lease: { ...c.lease, enabled: false } }, 'buy');
-    if (!bestBuy || pv < bestBuy.pv) bestBuy = { ...v, pv };
+  if (c.userPicked) { applySelection(c); return; }
+  const sel = selection(c);
+  sel.cash = defaultCash(c);
+  const cost = (variant, kind) => analyze(analysisInput([variant])).scenarios.find((x) => x.kind === kind)?.pvCost ?? Infinity;
+  let best = { id: null, pv: Infinity };
+  for (const f of [null, ...(c.offers || []).filter((o) => offerKind(o) === 'finance' && o.apr != null)]) {
+    const tmp = { ...c, buy: { ...c.buy }, lease: { ...c.lease, enabled: false }, selected: { ...sel, finance: f ? f.id : null } };
+    applySelection(tmp);
+    const pv = cost(tmp, 'buy');
+    if (pv < best.pv) best = { id: f ? f.id : null, pv };
   }
-  if (bestBuy && c.buy.source !== 'manual') {
-    c.buy = { ...bestBuy.buy, source: Object.keys(bestBuy.applied).length ? 'offer' : 'estimate' };
-    c.applied = { ...(c.applied || {}), cash: bestBuy.applied.cash, finance: bestBuy.applied.finance };
-    c.buyNote = Object.keys(bestBuy.applied).length > 0 && variants.length > 2 ? bestBuy.note : '';
+  sel.finance = best.id;
+  let bestLease = { id: null, pv: Infinity };
+  for (const o of (c.offers || []).filter((x) => offerKind(x) === 'lease' && x.monthly)) {
+    const tmp = { ...c, lease: { ...c.lease }, buy: { ...c.buy, enabled: false } };
+    applyLeaseOffer(tmp, o);
+    const pv = cost(tmp, 'lease');
+    if (pv < bestLease.pv) bestLease = { id: o.id, pv };
   }
-  const leases = offers.filter((o) => o.type === 'lease' && o.monthly);
-  if (leases.length && c.lease.source !== 'manual') {
-    let bestLease = null;
-    for (const o of leases) {
-      const tmp = { ...c, lease: { ...c.lease } };
-      applyOffer(tmp, o);
-      const pv = cost({ ...tmp, buy: { ...tmp.buy, enabled: false } }, 'lease');
-      if (!bestLease || pv < bestLease.pv) bestLease = { o, pv };
-    }
-    applyOffer(c, bestLease.o);
-  }
+  sel.lease = bestLease.id;
+  applySelection(c);
 }
 
 async function priceAll(onlyMissing = false) {
@@ -1174,26 +1471,15 @@ function setTab(t, { scroll = true } = {}) {
   if (t === 'models') renderModels();
 }
 
-function applyOffer(c, o) {
-  c.applied ||= {};
-  if (o.type === 'lease') {
-    Object.assign(c.lease, {
-      monthly: String(o.monthly), termMonths: String(o.term || 36),
-      dueAtSigning: o.dueAtSigning != null ? String(o.dueAtSigning) : '',
-      annualMileage: o.mileageLimit ? String(o.mileageLimit) : c.lease.annualMileage,
-      overMileageFee: o.overMileageFee ? String(o.overMileageFee) : c.lease.overMileageFee,
-      dispositionFee: o.dispositionFee != null ? String(o.dispositionFee) : c.lease.dispositionFee,
-      source: 'offer',
-    });
-    c.applied.lease = o.id;
-  } else if (o.type === 'finance') {
-    Object.assign(c.buy, { apr: String(o.apr), termMonths: String(o.term || 60), source: 'offer' });
-    c.applied.finance = o.id; delete c.applied.cash;
-    c.buy.rebate = '';
-  } else if (o.type === 'cash') {
-    Object.assign(c.buy, { rebate: String(o.cashback || 0), source: 'offer' });
-    c.applied.cash = o.id;
-  }
+function applyLeaseOffer(c, o) {
+  Object.assign(c.lease, {
+    monthly: String(o.monthly), termMonths: String(o.term || 36),
+    dueAtSigning: o.dueAtSigning != null ? String(o.dueAtSigning) : '',
+    annualMileage: o.mileageLimit ? String(Math.round(o.mileageLimit >= 16000 ? o.mileageLimit / ((o.term || 36) / 12) : o.mileageLimit)) : c.lease.annualMileage,
+    overMileageFee: o.overMileageFee ? String(o.overMileageFee) : c.lease.overMileageFee,
+    dispositionFee: o.dispositionFee != null ? String(o.dispositionFee) : c.lease.dispositionFee,
+    source: 'offer',
+  });
 }
 
 async function refreshUsage() {
@@ -1219,6 +1505,17 @@ function wire() {
   $('#vin').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); lookupVin(); } });
   $('#lookupPlate').addEventListener('click', lookupPlate);
   document.addEventListener('change', (e) => { const f = e.target.closest?.('[data-photo-upload]'); if (f && f.files?.[0]) uploadPhoto(f.files[0]); });
+  $('#vinPhoto').addEventListener('change', (e) => { if (e.target.files?.[0]) scanVin(e.target.files[0]); e.target.value = ''; });
+  $('#payoffPhoto').addEventListener('change', (e) => { if (e.target.files?.[0]) readPayoff(e.target.files[0], 'draft'); e.target.value = ''; });
+  $('#payoffPhotoCar').addEventListener('change', (e) => { if (e.target.files?.[0]) readPayoff(e.target.files[0], 'car'); e.target.value = ''; });
+  $('#results').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const act = b.dataset.act;
+    if (act === 'ics') downloadReminders();
+    else if (act === 'share') shareDecision();
+    else if (act === 'reprice') repriceNow();
+    else if (act === 'dismiss') { state.repriceNotice = { ...state.repriceNotice, before: state.repriceNotice?.after }; persist(); renderResults(); }
+  });
   $('#garageBtn').addEventListener('click', openGarage);
   $('#garageList').addEventListener('click', onGarageClick);
   $('#startAdd').addEventListener('click', startAdd);
@@ -1276,9 +1573,13 @@ function wire() {
       const c = state.candidates[Number(i)];
       const o = c.offers.find((x) => String(x.id) === id);
       if (o) {
-        if (o.type === 'cash' && c.applied?.cash === o.id) { c.buy.rebate = ''; delete c.applied.cash; }
-        else applyOffer(c, o);
-        c.buyNote = '';
+        const sel = selection(c);
+        const k = offerKind(o);
+        if (k === 'cash') sel.cash = sel.cash.includes(o.id) ? sel.cash.filter((x) => x !== o.id) : [...sel.cash, o.id];
+        else sel[k] = sel[k] === o.id ? null : o.id;
+        if (k === 'lease' && !sel.lease) c.lease = { ...c.lease, monthly: '', dueAtSigning: '', source: 'estimate' };
+        c.userPicked = true;
+        applySelection(c);
         renderResults(); renderModels(); persist();
       }
     }

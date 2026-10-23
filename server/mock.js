@@ -13,7 +13,8 @@ export async function marketcheck(path, p) {
       dealer: { name: `Mock ${p.make} of Denver ${i + 1}`, city: 'Denver', state: 'CO' },
       vdp_url: 'https://example.com', media: { photo_links: [] },
     }));
-    return { num_found: 12 + (h % 60), listings, stats: { price: { median: base + 1500, min: base }, msrp: { median: base + 3200 } } };
+    const usedK = p.car_type === 'used' ? 0.72 : p.car_type === 'certified' ? 0.8 : 1;
+    return { num_found: 12 + (h % 60), listings, stats: { price: { median: Math.round((base + 1500) * usedK), min: Math.round(base * usedK) }, msrp: { median: base + 3200 }, miles: { median: p.car_type === 'new' ? 8 : 24000 } } };
   }
   if (path.includes('incentive')) {
     if (!['Ford', 'Toyota', 'Honda', 'Hyundai'].includes(p.make)) return { num_found: 0, listings: [] };
@@ -23,8 +24,11 @@ export async function marketcheck(path, p) {
       listings: [
         { id: 'l1', offer: { offer_type: 'lease', titles: [`Lease a 2027 ${p.make} ${p.model || ''} for $369/mo`], vehicles: [{ year: 2027, make: p.make, model: p.model }], amounts: [{ monthly: 369, term: 36, term_unit: 'months' }], due_at_signing: 2999, msrp: 34500, mileage_limit: 10000, over_mileage_fee: 0.25, disposition_fee: 350, valid_through: '11/30/2026', disclaimers: ['Mock offer.'] } },
         { id: 'f1', offer: { offer_type: 'finance', titles: ['3.9% APR for 60 months'], vehicles: [{ year: 2027, make: p.make, model: p.model }], amounts: [{ apr: ford ? 1.9 : 3.9, term: 60, term_unit: 'months' }], valid_through: '11/30/2026' } },
-        { id: 'c1', offer: { offer_type: 'cash', titles: ['Customer cash'], vehicles: [{ year: 2027, make: p.make, model: p.model }], cashback_amount: ford ? 4000 : 1000, valid_through: '11/30/2026' } },
-        { id: 'c2', offer: { offer_type: 'cash', titles: ['Owner loyalty'], vehicles: [{ year: 2027, make: p.make, model: p.model }], cashback_amount: 1000, cashback_target_group: 'Current owners of eligible vehicles', valid_through: '11/30/2026' } },
+        { id: 'c1', offer: { offer_type: 'cash', titles: ['Retail Customer Cash'], vehicles: [{ year: 2027, make: p.make, model: p.model }], cashback_amount: ford ? 4000 : 1000, valid_through: '11/30/2026', disclaimers: ['Program #14232: take delivery by 1/4/2027.'] } },
+        { id: 'c2', offer: { offer_type: 'cash', titles: ['Retail Owner Loyalty'], vehicles: [{ year: 2027, make: p.make, model: p.model }], cashback_amount: 1000, cashback_target_group: 'Current owners of eligible vehicles', valid_through: '11/30/2026', disclaimers: ['Program #33394: proof of ownership required.'] } },
+        { id: 'c3', offer: { offer_type: 'cash', titles: ['$4,000 Cash Back + $1,000 Owner Loyalty'], vehicles: [{ year: 2027, make: p.make, model: p.model }], cashback_amount: 4000, valid_through: '11/30/2026', disclaimers: ['$4,000 Retail Customer Cash (PGM #14232) + $1,000 Retail Owner Loyalty (PGM #33394).'] } },
+        { id: 'c4', offer: { offer_type: 'cash', titles: ['Bonus Cash'], vehicles: [{ year: 2027, make: p.make, model: p.model }], cashback_amount: 1000, valid_through: '11/02/2026', disclaimers: ['Program #14256.'] } },
+        { id: 'c5', offer: { offer_type: 'cash', titles: ['2026 Military Recognition Exclusive Cash Reward'], vehicles: [{ year: 2027, make: p.make, model: p.model }], cashback_amount: 500, cashback_target_group: 'Military personnel', valid_through: '01/04/2027', disclaimers: ['May not be combined with any Ford private offer (32894).'] } },
       ],
     };
   }

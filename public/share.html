@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>Lease decision</title>
+  <meta name="theme-color" content="#14213D">
+  <base href="/">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .share { max-width: 620px; margin: 0 auto; padding: 18px 16px 48px; }
+    .share-top { display: flex; align-items: center; gap: 10px; font-weight: 750; font-variation-settings: 'wdth' 112; margin-bottom: 16px; }
+    .share-top svg { width: 26px; height: 26px; }
+    .share h2 { font-size: 1.15rem; margin: 22px 0 10px; }
+    .opt { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+    .opt b { font-weight: 650; }
+    .opt .m { text-align: right; font-weight: 800; font-variation-settings: 'wdth' 115; font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+    .opt small { grid-column: 1 / -1; color: var(--ink-soft); font-size: 0.82rem; }
+    .opt.best .m { color: var(--go); }
+    .share .fine { font-size: 0.8rem; color: var(--muted); margin-top: 18px; }
+  </style>
+</head>
+<body>
+  <main class="share" id="share" aria-live="polite"><p>Loading…</p></main>
+  <script type="module">
+    import { analyze, fmtYears } from './engine.js';
+    const $ = (s) => document.querySelector(s);
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const money = (x) => (Number.isFinite(x) ? `${x < 0 ? '−' : ''}$${Math.round(Math.abs(x)).toLocaleString('en-US')}` : '—');
+    const token = location.pathname.split('/').filter(Boolean).pop();
+    const logo = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#14213D"></rect><path d="M7 20l3-7h12l3 7v4H7z" fill="none" stroke="#FBFCFD" stroke-width="2.2" stroke-linejoin="round"></path><circle cx="11" cy="24" r="2" fill="#FBFCFD"></circle><circle cx="21" cy="24" r="2" fill="#FBFCFD"></circle></svg>';
+    try {
+      const res = await fetch(`api/share/${encodeURIComponent(token)}`);
+      const p = await res.json();
+      if (!res.ok) throw new Error(p.error || 'This share link no longer works.');
+      const pct = p.pricing?.plan && p.pricing.plan !== 'public' ? Number(p.pricing[p.pricing.plan]) || 0 : 0;
+      const candidates = (p.candidates || []).map((c) => {
+        const az = ['ford', 'lincoln'].includes(String(c.make).toLowerCase()) && pct > 0 && Number(c.msrp) > 0;
+        return { ...c, label: [c.condition && c.condition !== 'new' ? (c.condition === 'certified' ? 'certified' : 'used') : '', c.year, c.make, c.model].filter(Boolean).join(' '), sellingPrice: az ? Math.round(Number(c.msrp) * (1 - pct / 100)) : c.sellingPrice };
+      });
+      const r = analyze({ ...p, candidates, today: new Date().toISOString() });
+      document.title = `${p.name}: lease decision`;
+      const best = r.scenarios[0];
+      const c = p.current;
+      const end = c.leaseEndDate ? new Date(`${c.leaseEndDate}T12:00:00`) : null;
+      const days = end ? Math.ceil((end - Date.now()) / 86400000) : null;
+      const photo = p.photo?.url ? `<figure><img class="ph win-ph${p.photo.custom ? ' contain' : ''}${p.photo.blend ? ' blend' : ''}" src="${esc(p.photo.url)}" alt="${esc(p.name)}" referrerpolicy="no-referrer"></figure>` : '';
+      if (!best) throw new Error('This car doesn’t have enough numbers yet to compare.');
+      const second = r.scenarios[1];
+      $('#share').innerHTML = `
+        <div class="share-top">${logo}<span>${esc(p.name)}</span></div>
+        <article class="sticker">
+          <div class="band"><span>${days != null && days >= 0 ? `Decide by ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${days} days` : 'Recommendation'}</span><span>${r.horizonMonths / 12} yrs</span></div>
+          <div class="verdict ${photo ? 'with-ph' : ''}"><h1>${esc(r.verdict.headline)}</h1>${photo}</div>
+          <div class="figures">
+            <div><b>${money(best.perMonth)}</b><span>per month, all in</span></div>
+            <div><b>${money(Number(c.buyoutPrice))}</b><span>buyout price</span></div>
+            <div><b>${second ? money(second.pvCost - best.pvCost) : '—'}</b><span>saved vs. next best</span></div>
+          </div>
+          ${r.verdict.lines.length ? `<ul>${r.verdict.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
+        </article>
+        <h2>Every option, cheapest first</h2>
+        ${r.scenarios.slice(0, 8).map((s, i) => `<div class="opt ${i === 0 ? 'best' : ''}"><b>${esc(s.title)}</b><span class="m">${money(s.perMonth)}/mo</span><small>${money(s.pvCost)} over ${fmtYears(r.horizonMonths)}${s.monthlyPayment ? `, payment ${money(s.monthlyPayment)}/mo` : ''}</small></div>`).join('')}
+        <p class="fine">“All in” counts payments, interest, taxes, fees, insurance, gas and upkeep, minus what the car is worth at the end. ${[c.year, c.make, c.model, c.trim].filter(Boolean).join(' ')}, ${Number(c.currentMiles || 0).toLocaleString()} miles. ${p.repricedAt ? `Prices checked ${new Date(p.repricedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}.` : ''} Estimates, not offers.</p>`;
+    } catch (e) {
+      $('#share').innerHTML = `<div class="share-top">${logo}<span>Lease Buyout Advisor</span></div><div class="empty"><p>${esc(e.message)}</p></div>`;
+    }
+  </script>
+</body>
+</html>

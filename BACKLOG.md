@@ -9,15 +9,20 @@
 
 ## Next up
 
-- Camera VIN scan in the add-a-car flow (barcode on the door jamb / windshield).
-- Read a photo of the payoff letter to fill buyout price, lease end and miles allowed.
-- Reminders before the decide-by date: 90 days (get a fresh payoff quote), 60 (re-check prices and offers, notify if the answer changes), 30 (book the pre-return inspection), 7 (final numbers and checklist).
-- Scheduled re-pricing of saved cars so offers and market value stay current without spending calls on every visit.
-- Lease-specific Ford offers that stack with A/Z-Plan: confirm compatibility rules and apply automatically.
-- Used and certified alternatives (e.g. a 1–2 year old Explorer) alongside new.
-- Share a read-only summary of one car's decision (for Carol).
+- Live camera viewfinder for VIN scanning (today: take a photo; the barcode is decoded on the phone, and Gemini reads the printed VIN if the barcode can't be read).
+- Push or text notifications when re-pricing changes the answer (today: a banner in the app and calendar reminders).
+- Apply loyalty / lease-renewal cash to lease deals as well as purchases.
 
 ## Done
+
+- Camera VIN scan (photo → on-phone barcode decode → Gemini text fallback, with VIN check-digit validation).
+- Payoff letter photo → buyout, lease end, miles allowed, payment and fees filled in for review (Gemini).
+- Decide-by timeline at 90/60/30/7 days with one-tap calendar reminders (.ics).
+- Scheduled re-pricing overnight (weekly → daily near the deadline, within the MarketCheck budget), "answer changed" banner, Re-check now.
+- Offers fully stackable and selectable: cash stacks, one special APR, one lease; defaults count each program once, loyalty only for same-brand, military/first-responder opt-in.
+- Used and certified alternatives priced from local listings, with their own depreciation and warranty effects.
+- Share link per car: read-only summary without the VIN.
+- Studio car images from Autoweb (transparent cutouts when available).
 
 - Cost engine: buy out vs lease new vs buy new, all-in monthly cost, break-even by years kept.
 - MarketCheck + auto.dev data with caching and a monthly call meter.

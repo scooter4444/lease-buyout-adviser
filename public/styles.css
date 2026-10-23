@@ -439,3 +439,26 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.45); }
 /* White-background studio shots melt into the card's light backdrop. */
 .ph.blend { mix-blend-mode: multiply; }
 .mc-pic, .g-pic, .c-pic, .car-id .car-ph, .sticker figure { isolation: isolate; }
+.cand h5 { margin: 12px 0 6px; font-size: 0.82rem; color: var(--ink); }
+.cand h5 .soft, .soft { font-weight: 500; color: var(--muted); }
+.stack-total { margin: 6px 0 0; font-size: 0.85rem; font-weight: 650; color: var(--go); }
+.scan-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; }
+.scan-btn.inline { width: auto; margin: 0 0 10px; }
+
+/* ---------- Verdict extras ---------- */
+.verdict-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: -6px 0 18px; }
+.verdict-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.notice { border-radius: 10px; padding: 12px 14px; margin: -6px 0 14px; font-size: 0.92rem; }
+.notice.changed { background: var(--warn-tint); border-left: 4px solid var(--warn); }
+.checked { font-size: 0.82rem; color: var(--ink-soft); margin: -8px 0 12px; }
+.linkish { border: 0; background: none; padding: 0; color: var(--ink); font: inherit; font-weight: 650; text-decoration: underline; cursor: pointer; }
+.timeline { list-style: none; margin: 0 0 12px; padding: 0; border-top: 1px solid var(--line); }
+.timeline li { display: grid; grid-template-columns: 96px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 0.9rem; line-height: 1.4; }
+.timeline li.past { opacity: 0.55; }
+.t-when { font-weight: 750; font-size: 0.85rem; }
+.t-when small { display: block; font-weight: 500; color: var(--ink-soft); }
+.panel .btn.small { display: inline-flex; align-items: center; gap: 6px; }
+#toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+  background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 10px; font-size: 0.9rem; max-width: min(92vw, 460px); transition: opacity .2s, transform .2s; z-index: 50; }
+#toast.on { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }

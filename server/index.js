@@ -7,7 +7,8 @@ import {
   lookupVehicle, newCarMarket, incentives, autodevTco, autodevApr, plateToVin, photoFor, cutoutsConfigured, configured, ProviderError,
 } from './providers.js';
 import { usageThisMonth, cacheDir } from './cache.js';
-import { ask, askConfigured } from './ask.js';
+import { ask, askConfigured, readImage } from './ask.js';
+import { startRepricer } from './repricer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -58,6 +59,9 @@ app.get('/api/plate', wrap((req) => plateToVin({ state: req.query.state, plate: 
 app.get('/api/new-market', wrap((req) => newCarMarket(req.query)));
 app.get('/api/incentives', wrap((req) => incentives(req.query)));
 app.get('/api/photo', wrap((req) => photoFor(req.query)));
+app.post('/api/read-image', async (req, res) => {
+  try { res.json(await readImage(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
 app.post('/api/ask', async (req, res) => {
   try { res.json(await ask(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
@@ -93,18 +97,49 @@ if (!fs.existsSync(PROFILE) && process.env.SEED_PROFILE) {
     console.warn('SEED_PROFILE is not valid JSON:', e.message);
   }
 }
-app.get('/api/profile', (_req, res) => {
-  try { res.json(JSON.parse(fs.readFileSync(PROFILE, 'utf8'))); } catch { res.json(null); }
-});
+const readStore = () => { try { return JSON.parse(fs.readFileSync(PROFILE, 'utf8')); } catch { return null; } };
+const writeStore = (st) => { fs.writeFileSync(`${PROFILE}.tmp`, JSON.stringify(st)); fs.renameSync(`${PROFILE}.tmp`, PROFILE); };
+app.get('/api/profile', (_req, res) => res.json(readStore()));
 app.put('/api/profile', (req, res) => {
   try {
-    fs.writeFileSync(PROFILE, JSON.stringify({ ...req.body, savedAt: new Date().toISOString() }));
+    const cur = readStore();
+    // Prices were refreshed on the server since this copy was loaded: tell the app to reload.
+    if (cur?.rev && (Number(req.body?.rev) || 0) < cur.rev) return res.status(409).json({ error: 'stale', rev: cur.rev });
+    writeStore({ ...req.body, rev: cur?.rev || 0, shares: cur?.shares || {}, savedAt: new Date().toISOString() });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
+// Re-pricing on a schedule (overnight), and on demand for one car.
+const repricer = startRepricer({ file: PROFILE, readStore, writeStore });
+app.post('/api/reprice-now', async (_req, res) => {
+  try { await repricer.runNow(); res.json({ ok: true, store: readStore() }); } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Share links: a read-only page for one car (no VIN), e.g. for Carol.
+app.post('/api/share', (req, res) => {
+  const st = readStore();
+  const id = String(req.body?.profileId || '');
+  if (!st?.profiles?.[id]) return res.status(404).json({ error: 'Save the car first, then share it.' });
+  st.shares ||= {};
+  let token = Object.keys(st.shares).find((t) => st.shares[t] === id);
+  if (!token) { token = crypto.randomBytes(9).toString('base64url'); st.shares[token] = id; writeStore(st); }
+  res.json({ url: `s/${token}` });
+});
+app.get('/api/share/:token', (req, res) => {
+  const st = readStore();
+  const id = st?.shares?.[req.params.token];
+  const p = id && st.profiles?.[id];
+  if (!p) return res.status(404).json({ error: 'This share link no longer works.' });
+  const { vin, ...current } = p.current || {};
+  void vin;
+  res.json({ name: p.name, pricing: p.pricing, photo: p.photo, assumptions: p.assumptions, current, candidates: p.candidates, repricedAt: p.repricedAt || null, lookup: p.lookup ? { recalls: p.lookup.recalls || null, valuation: p.lookup.valuation || null, vehicle: { ...(p.lookup.vehicle || {}), vin: undefined } } : null });
+});
+app.get('/s/:token', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'share.html')));
+
+app.get('/vendor/zxing.js', (_req, res) => res.sendFile(path.join(__dirname, '..', 'node_modules', '@zxing', 'library', 'umd', 'index.min.js'), { maxAge: '7d' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], maxAge: '5m' }));
 
 const port = Number(process.env.PORT) || 3000;

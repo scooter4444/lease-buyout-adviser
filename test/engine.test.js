@@ -117,3 +117,18 @@ test('break-even curve has 8 rows with every scenario', () => {
   assert.equal(r.curve.length, 8);
   for (const row of r.curve) for (const k of ['buyout', 'buy-rav', 'lease-rav']) assert.ok(Number.isFinite(row[k]), k);
 });
+
+test('used and certified candidates: no lease, value follows the curve from current age', () => {
+  const r = analyze(base({ candidates: [
+    { id: 'u', year: 2024, make: 'Ford', model: 'Explorer', sellingPrice: 33000, msrp: 45000, mpg: 23, condition: 'used', miles: 28000 },
+    { id: 'c', year: 2025, make: 'Ford', model: 'Explorer', sellingPrice: 37000, msrp: 45000, mpg: 23, condition: 'certified', miles: 12000 },
+  ] }));
+  const ids = r.scenarios.map((s) => s.id);
+  assert.ok(ids.includes('buy-u') && ids.includes('buy-c'));
+  assert.ok(!ids.includes('lease-u') && !ids.includes('lease-c'));
+  const u = r.scenarios.find((s) => s.id === 'buy-u');
+  assert.ok(u.valueAtEnd < 33000 && u.valueAtEnd > 15000, `value ${u.valueAtEnd}`);
+  assert.match(u.title, /buy used/);
+  const sum = Object.values(u.breakdown).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(sum - u.netCost) < 0.01);
+});

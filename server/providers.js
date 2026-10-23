@@ -237,12 +237,14 @@ function slimListing(l) {
 
 // ---------- New vehicle market ----------
 
-export async function newCarMarket({ year, make, model, trim, zip, radius = 100 }) {
+export async function newCarMarket({ year, make, model, trim, zip, radius = 100, car_type = 'new', max_miles }) {
   if (!make || !model) throw new ProviderError('app', 400, 'make and model are required');
   const errors = [];
+  const type = ['used', 'certified'].includes(car_type) ? car_type : 'new';
   const r = await attempt(() => mc('/v2/search/car/active', {
-    car_type: 'new', year, make, model, trim, zip, radius: Math.min(100, radius),
-    stats: 'price,msrp', rows: 12, sort_by: 'price', sort_order: 'asc', include_build_object: true,
+    car_type: type, year, make, model, trim, zip, radius: Math.min(100, radius),
+    miles_range: type !== 'new' && max_miles ? `0-${Number(max_miles)}` : undefined,
+    stats: type === 'new' ? 'price,msrp' : 'price,msrp,miles', rows: 12, sort_by: 'price', sort_order: 'asc', include_build_object: true,
   }, 12 * 3600));
   if (r.ok) {
     const L = (r.data?.listings || []).map(slimListing);
@@ -257,6 +259,8 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100 
       medianMsrp: msrpMed ? Math.round(msrpMed) : null,
       lowPrice: r.data?.stats?.price?.min ?? (L[0]?.price || null),
       mpg: mpg ? Math.round(mpg) : null,
+      medianMiles: r.data?.stats?.miles?.median ? Math.round(r.data.stats.miles.median) : (median(L.map((l) => l.miles)) || null),
+      carType: type,
       listings: L,
       errors,
     };
@@ -266,7 +270,7 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100 
     'vehicle.make': make, 'vehicle.model': model, 'vehicle.year': year || undefined, zip, distance: radius, limit: 20, sort: 'price.asc',
   }, 12 * 3600));
   if (a.ok) {
-    const rows = (a.data?.data || []).filter((l) => !l.retailListing?.used);
+    const rows = (a.data?.data || []).filter((l) => (type === 'new' ? !l.retailListing?.used : type === 'certified' ? l.retailListing?.cpo : l.retailListing?.used));
     const prices = rows.map((l) => l.retailListing?.price).filter((p) => p > 0);
     return {
       source: 'auto.dev',
