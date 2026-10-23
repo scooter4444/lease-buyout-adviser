@@ -262,6 +262,7 @@ export function normalize(input = {}) {
         dispositionFee: num(v.lease?.dispositionFee, 395),
         residualPct: v.lease?.residualPct !== undefined && v.lease?.residualPct !== '' ? num(v.lease.residualPct) : null,
         moneyFactor: num(v.lease?.moneyFactor, DEFAULT_MF),
+        addOnCash: num(v.lease?.addOnCash, 0),
         acquisitionFee: num(v.lease?.acquisitionFee, 695),
         source: v.lease?.source || 'estimate',
       },
@@ -522,8 +523,13 @@ export function leaseNewScenario(n, v, H, exit) {
     }).monthly;
     estimated = true;
   }
-  const taxed = monthly * (1 + a.leaseTaxPct / 100);
-  const due = L.dueAtSigning ?? (taxed + a.docFee);
+  // Extra cash you qualify for (loyalty, conquest, military...) goes against the money due
+  // at signing first; anything left lowers the payments.
+  const addOn = Math.max(0, L.addOnCash || 0);
+  const due0 = L.dueAtSigning ?? (monthly * (1 + a.leaseTaxPct / 100) + a.docFee);
+  const fromDue = Math.min(addOn, Math.max(0, due0));
+  const taxed = Math.max(0, monthly - (addOn - fromDue) / L.termMonths) * (1 + a.leaseTaxPct / 100);
+  const due = due0 - fromDue;
   const T = L.termMonths;
 
   // One full lease term of lease-specific cash flows, then scale to the horizon

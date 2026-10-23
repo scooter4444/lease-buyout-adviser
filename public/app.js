@@ -1,6 +1,7 @@
 import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, defaultInsurance, maintenanceAnnual, modelAge, fmtYears } from './engine.js';
 import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
 import { logoUrl, logoIsMono } from './logos.js';
+import { bestStack, classify, eligible } from './stack.js';
 
 // ---------- State ----------
 const STORAGE_KEY = 'lba:v2';
@@ -177,13 +178,15 @@ function candidateHTML(c, i) {
     const main = kind === 'lease' ? `$${o.monthly}/mo for ${o.term || '?'} mo${o.dueAtSigning != null ? `, $${o.dueAtSigning.toLocaleString()} due` : ''}`
       : kind === 'finance' ? `${o.apr}% APR for ${o.term || '?'} mo` : `$${(o.cashback || 0).toLocaleString()} ${esc(cashLabel(o))}`;
     const pressed = kind === 'cash' ? sel.cash.includes(o.id) : sel[kind] === o.id;
-    const who = o.group ? `For ${o.group.toLowerCase()}. ` : '';
-    return `<button type="button" class="offer" data-offer="${i}:${esc(o.id)}" aria-pressed="${pressed}">${main}<small>${esc(who)}${esc((o.title || o.vehicles?.[0] || '').slice(0, 60))}${o.validThrough ? `, ends ${esc(o.validThrough)}` : ''}</small></button>`;
+    let el = { ok: true, why: '' };
+    if (kind === 'cash') { try { el = eligible(o, classify({ ...o, make: c.make }), eligibilityOf(), c.make); } catch {} }
+    const who = kind !== 'cash' ? '' : el.ok ? (el.why && el.why !== 'Open to everyone' ? `You qualify: ${el.why}. ` : '') : `Not for you: ${el.why}. `;
+    return `<button type="button" class="offer ${el.ok ? '' : 'no'}" data-offer="${i}:${esc(o.id)}" aria-pressed="${pressed}">${main}<small>${esc(who)}${esc((o.title || o.vehicles?.[0] || '').slice(0, 60))}${o.validThrough ? `, ends ${esc(o.validThrough)}` : ''}</small></button>`;
   };
   const byKind = (k) => (c.offers || []).filter((o) => offerKind(o) === k);
   const cashTotal = stackedCash(c);
   const offerChips = (c.offers || []).length ? `
-    ${byKind('cash').length ? `<h5>Cash back <span class="soft">tap any to stack</span></h5><div class="offers">${byKind('cash').map(chip).join('')}</div>
+    ${byKind('cash').length ? `<h5>Cash back <span class="soft">the best legal stack is picked for you; tap to change</span></h5><div class="offers">${byKind('cash').map(chip).join('')}</div>
       <p class="stack-total">${cashTotal ? `Stacking ${money(cashTotal)} in cash` : 'No cash selected'}</p>` : ''}
     ${byKind('finance').length ? `<h5>Special financing <span class="soft">pick one, stacks with cash</span></h5><div class="offers">${byKind('finance').map(chip).join('')}</div>` : ''}
     ${byKind('lease').length ? `<h5>Lease deals <span class="soft">pick one</span></h5><div class="offers">${byKind('lease').map(chip).join('')}</div>` : ''}` : '';
@@ -196,7 +199,7 @@ function candidateHTML(c, i) {
       ${inp('sellingPrice', azEligible(c) && planPct() ? 'Street price (before A/Z-Plan)' : 'Price you’d pay', { pre: '$' })}${inp('msrp', 'MSRP', { pre: '$' })}
       ${inp('mpg', 'Combined MPG', { placeholder: '30' })}${inp('insuranceAnnual', 'Insurance per year', { pre: '$', placeholder: c.sellingPrice ? `≈ ${defaultInsurance(Number(c.sellingPrice))}` : '' })}
     </div>
-    ${offerChips ? `<h4>Manufacturer offers near you</h4><p class="hint">Everything you select stacks. Offers can be trim-specific or need proof of eligibility, so confirm the combination with the dealer.</p>${offerChips}` : ''}
+    ${offerChips ? `<h4>Manufacturer offers near you</h4><p class="hint">Offers are matched to who’s buying (Settings): loyalty, conquest, lease renewal and military cash are checked against the household. Bring proof of eligibility, and confirm the final combination with the dealer.</p>${offerChips}` : ''}
     <h4><label><input type="checkbox" data-path="${p('buy.enabled')}" ${c.buy.enabled ? 'checked' : ''}> Buy it</label>${c.buy.source !== 'estimate' ? '<span class="tag offer-tag">offer applied</span>' : ''}</h4>
     <div class="grid" ${c.buy.enabled ? '' : 'hidden'}>
       ${inp('buy.rebate', 'Rebate / cash back', { pre: '$', placeholder: '0' })}${inp('buy.apr', 'Loan APR', { suf: '%', placeholder: '6.5' })}
@@ -325,7 +328,7 @@ function offerSummary(c) {
   const lease = (c.offers || []).find((o) => o.id === sel.lease);
   const lt = lease ? leaseTermsFromOffer(lease) : null;
   const leaseTxt = lease ? `Lease${lease.year || lease.trim ? ` (${[lease.year, lease.trim].filter(Boolean).join(' ')})` : ''}: $${lease.monthly}/mo for ${lease.term} mo, ${money(lease.dueAtSigning || 0)} due${lt ? `; factory rate ${lt.moneyFactor.toFixed(5)} (${(lt.moneyFactor * 2400).toFixed(1)}% APR), residual ${lt.residualPct}%` : ''}.` : '';
-  const picked = [c.buyNote, leaseTxt].filter(Boolean).join(' ');
+  const picked = [c.buyNote, leaseTxt, c.leaseNote].filter(Boolean).join(' ');
   return `${picked || 'No offers selected.'} ${n} offer${n === 1 ? '' : 's'} available; change them in Price, offers and terms.`;
 }
 
@@ -507,6 +510,7 @@ function renderResults() {
       <div class="o-pic">${ph ? imgHTML(ph.url, s.vehicle, phCls(ph)) : '<span class="ph ph-empty"></span>'}</div>
       <div class="o-t">${logoHTML(s.kind === 'buyout' ? state.current.make : winnerMake(s), 'inline')}<b>${esc(optTitle(s))}</b><small>${esc(payText(s) || '')}${s.estimated ? ', estimated' : ''}</small></div>
       <div class="o-m"><b>${money(s.monthly)}</b><small>${diff == null ? 'a month' : `${diff >= 0 ? '+' : '−'}${money(Math.abs(diff))} vs. buying out`}</small></div>
+      ${stackChips(s)}
     </li>`;
   }).join('');
   el.innerHTML = `
@@ -730,7 +734,7 @@ let saveTimer;
 function snapshot() {
   const profiles = {};
   for (const [id, p] of Object.entries(store.profiles)) {
-    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
+    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
   }
   return JSON.stringify({ active: store.active, rev: store.rev || 0, profiles });
 }
@@ -758,6 +762,7 @@ function hydrate(p) {
     lastVerdict: p.lastVerdict || null, repricedAt: p.repricedAt || null, repriceLog: p.repriceLog || null,
     needsVerdictCheck: !!p.needsVerdictCheck, repriceNotice: p.repriceNotice || null,
     assumptions: { ...b.assumptions, ...p.assumptions },
+    eligibility: { leaseCaptive: true, ...(p.eligibility || {}) },
     current: { ...b.current, ...p.current },
     candidates: (p.candidates || []).map((c) => blankCandidate({ ...c, buy: { ...blankCandidate().buy, ...c.buy }, lease: { ...blankCandidate().lease, ...c.lease } })),
     lookup: p.lookup || null,
@@ -782,7 +787,24 @@ async function restore() {
 }
 
 // After loading: re-pick offers the server refreshed, and note whether the answer changed.
+// Carol's Edge is white: always show the white studio shot of it, never a listing photo in another color.
+const WHITE_EDGE = { url: 'img/ford-edge-2024-white.png', exact: true, custom: true, cutout: true, fixed: 'white-edge' };
+function knownHousehold(id, p) {
+  const isCarols = id === 'carol' || /carol/i.test(p.name || '');
+  if (!isCarols || p.eligibility?.setAt) return false;
+  p.eligibility = { owned: 'Toyota, Cadillac', military: true, leaseCaptive: true, setAt: '2026-10-23', ...(p.eligibility || {}) };
+  for (const c of p.candidates || []) if (c.offers?.length) c.needsPick = true;
+  return true;
+}
+function fixedPhotos(id, p) {
+  const isCarols = id === 'carol' || /carol/i.test(p.name || '');
+  if (isCarols && /ford/i.test(p.current?.make || '') && /edge/i.test(p.current?.model || '') && p.photo?.fixed !== 'white-edge') { p.photo = { ...WHITE_EDGE }; return true; }
+  return false;
+}
 function afterLoad() {
+  let fixed = false;
+  for (const [id, p] of Object.entries(store.profiles)) { fixed = fixedPhotos(id, p) || fixed; fixed = knownHousehold(id, p) || fixed; }
+  if (fixed) setTimeout(() => persist(), 0);
   for (const p of Object.values(store.profiles)) {
     for (const c of p.candidates) if (c.needsPick) { const keep = state; state = p; autoPick(c); state = keep; delete c.needsPick; }
     if (p.needsVerdictCheck) {
@@ -1256,6 +1278,11 @@ function optTitle(s) {
 }
 function openSettings() {
   const a = state.assumptions;
+  const e = state.eligibility || {};
+  $('#eligOwned').value = e.owned || '';
+  $('#eligLease').checked = e.leaseCaptive !== false;
+  $('#eligLeaseLabel').textContent = state.current.make ? `Leasing the ${curLabel()} through ${/ford|lincoln/i.test(state.current.make) ? 'Ford Credit' : `${state.current.make}’s own finance company`}` : 'Current car is leased through the brand’s finance company';
+  for (const k of ['military', 'firstResponder', 'college', 'costco']) $(`#elig-${k}`).checked = !!e[k];
   for (const r of $$('input[name="costMode"]')) r.checked = r.value === costMode();
   $('#setPeriod').value = String(Math.min(7, Math.max(1, Math.round(Number(a.horizonYears) || 3))));
   $('#setSpread').checked = spreadOn();
@@ -1274,6 +1301,9 @@ function settingsHints() {
 }
 function onSettingsChange() {
   const a = state.assumptions;
+  const before = JSON.stringify(state.eligibility || {});
+  state.eligibility = { ...(state.eligibility || {}), owned: $('#eligOwned').value, leaseCaptive: $('#eligLease').checked, military: $('#elig-military').checked, firstResponder: $('#elig-firstResponder').checked, college: $('#elig-college').checked, costco: $('#elig-costco').checked, setAt: state.eligibility?.setAt || new Date().toISOString().slice(0, 10) };
+  if (JSON.stringify(state.eligibility) !== before) for (const c of state.candidates) if (c.offers?.length) autoPick(c);
   a.costMode = $$('input[name="costMode"]').find((r) => r.checked)?.value || 'payments';
   a.horizonYears = $('#setPeriod').value;
   a.spreadUpfront = $('#setSpread').checked;
@@ -1288,6 +1318,20 @@ function onSettingsChange() {
   renderResults(); renderModels(); persist();
 }
 
+// The incentives stacked into an option, as small chips: "$4,000 cash back", "$1,000 conquest · Household Cadillac".
+function stackChips(s) {
+  const c = state.candidates.find((x) => x.id === s.candidateId);
+  if (!c || s.kind === 'buyout') return '';
+  const sel = c.selected || {};
+  const ids = s.kind === 'lease' ? sel.leaseCash || [] : sel.cash || [];
+  const used = (c.offers || []).filter((o) => ids.includes(o.id));
+  const fin = s.kind === 'buy' && (c.offers || []).find((o) => o.id === sel.finance);
+  const chips = used.map((o) => `<span class="chip" title="${esc(sel.why?.[o.id] || '')}">${money(o.cashback)} ${esc(cashLabel(o))}</span>`);
+  if (fin) chips.push(`<span class="chip">${fin.apr}% APR</span>`);
+  if (s.kind === 'buy' && azEligible(c) && planPct()) chips.unshift(`<span class="chip">${c.azOff ? 'public price' : `${esc(state.pricing.plan)}-Plan`}</span>`);
+  const total = used.reduce((t, o) => t + (o.cashback || 0), 0);
+  return chips.length ? `<span class="o-s" aria-label="Incentives used">${chips.join('')}${used.length > 1 ? `<span class="chip sum">${money(total)} total</span>` : ''}</span>` : '';
+}
 function winnerMake(s) {
   if (!s) return '';
   if (s.kind === 'buyout') return state.current.make;
@@ -1306,7 +1350,7 @@ const azEligible = (c) => AZ_MAKES.has(String(c.make || '').toLowerCase());
 function effectivePrice(c, p = state) {
   const pct = planPct(p);
   const msrp = Number(c.msrp) || 0;
-  if (pct > 0 && azEligible(c) && msrp > 0) return Math.round(msrp * (1 - pct / 100));
+  if (pct > 0 && azEligible(c) && msrp > 0 && !c.azOff) return Math.round(msrp * (1 - pct / 100));
   return Number(c.sellingPrice) || 0;
 }
 function analysisInput(candidates = state.candidates, extra = {}, p = state) {
@@ -1378,7 +1422,7 @@ async function lookupVin() {
       ? `Found it. Market value ${money(r.valuation.marketValue)}.`
       : (miles && zip ? 'Found the car, but no market value came back. Enter one manually.' : 'Found the car. Add odometer miles and ZIP, then look up again for its market value.');
     if (errs.length) status.textContent += ` (${errs.map((x) => `${x.provider}: ${x.message}`).join('; ')})`;
-    if (state.photo && !state.photo.exact) state.photo = null;
+    if (state.photo && !state.photo.exact && !state.photo.fixed) state.photo = null;
     renderCarId();
     refreshPlaceholders();
     scheduleResults();
@@ -1460,23 +1504,17 @@ function stackedCash(c) {
 // Model year an offer is for (offers for different model years never stack).
 const offerYear = (o) => Number(o.year) || Number(String(o.vehicles?.[0] || '').match(/^(20\d\d)\b/)?.[1]) || null;
 const yearOk = (o, y) => !y || !offerYear(o) || offerYear(o) === y;
-// Default cash: everything you likely qualify for, each manufacturer program counted once,
-// all for one model year, and none that the fine print says can't go with a special APR.
-function defaultCash(c, year = Number(c.year) || null, withApr = false) {
-  const sameBrand = String(c.make).toLowerCase() === String(state.current.make).toLowerCase();
-  const cash = (c.offers || []).filter((o) => offerKind(o) === 'cash' && o.cashback > 0 && yearOk(o, year))
-    .filter((o) => !isAffinity(o) && (!isLoyalty(o) || sameBrand) && (!isConquest(o) || !sameBrand))
-    .filter((o) => !(withApr && o.noSpecialApr))
-    .sort((a, b) => pgmsOf(a).length - pgmsOf(b).length || b.cashback - a.cashback);
-  const covered = new Set(), titles = new Set(), picked = [];
-  for (const o of cash) {
-    const p = pgmsOf(o);
-    const key = `${cashLabel(o)}|${o.cashback}`;
-    if (p.length ? p.some((x) => covered.has(x)) : titles.has(key)) continue;
-    p.forEach((x) => covered.add(x)); titles.add(key);
-    picked.push(o.id);
-  }
-  return picked;
+// Who's buying (Settings): drives loyalty, conquest, lease-renewal and affinity cash.
+function eligibilityOf(p = state) {
+  const e = p.eligibility || {};
+  const owned = String(e.owned || '').split(/[,;/]+|\band\b/i).map((x) => x.trim()).filter(Boolean);
+  const lease = p.current?.make ? { make: p.current.make, captive: e.leaseCaptive !== false } : null;
+  return { owned, household: [...owned, ...(lease ? [lease.make] : [])], currentLease: lease, military: !!e.military, firstResponder: !!e.firstResponder, college: !!e.college, costco: !!e.costco };
+}
+const azActiveFor = (c) => azEligible(c) && planPct() > 0 && !c.azOff;
+// The best legal cash stack for one way of paying.
+function stackFor(c, { year = Number(c.year) || null, mode = 'finance', specialApr = false, azActive = azActiveFor(c) } = {}) {
+  return bestStack(c.offers || [], { elig: eligibilityOf(), make: c.make, mode, specialApr, azActive, year });
 }
 function applySelection(c) {
   const sel = selection(c);
@@ -1486,39 +1524,52 @@ function applySelection(c) {
   const lease = (c.offers || []).find((o) => o.id === sel.lease);
   if (lease) applyLeaseOffer(c, lease);
   else if (c.lease.source === 'offer') c.lease = { ...c.lease, monthly: '', dueAtSigning: '', moneyFactor: '', residualPct: '', source: 'estimate' };
-  const parts = (c.offers || []).filter((o) => sel.cash.includes(o.id)).map((o) => `${money(o.cashback)} ${cashLabel(o)}`);
+  const leaseCash = (c.offers || []).filter((o) => (sel.leaseCash || []).includes(o.id)).reduce((t, o) => t + (o.cashback || 0), 0);
+  c.lease = { ...c.lease, addOnCash: leaseCash ? String(leaseCash) : '' };
+  const named = (ids) => (c.offers || []).filter((o) => ids.includes(o.id)).map((o) => `${money(o.cashback)} ${cashLabel(o)}${sel.why?.[o.id] ? ` (${sel.why[o.id]})` : ''}`);
+  const parts = named(sel.cash || []);
   const yr = sel.year ? `${sel.year} model: ` : '';
-  c.buyNote = parts.length || fin ? `${yr}using ${[parts.join(' + '), fin ? `${fin.apr}% for ${fin.term} months` : ''].filter(Boolean).join(', plus ')}.` : '';
+  const az = azEligible(c) && planPct() ? (c.azOff ? `public price (A/Z-Plan skipped: the stack beats it)` : `${state.pricing.plan}-Plan price`) : '';
+  c.buyNote = parts.length || fin || az ? `${yr}buy at ${[az, parts.join(' + '), fin ? `${fin.apr}% for ${fin.term} months` : ''].filter(Boolean).join(', plus ')}.` : '';
   c.buyNote = c.buyNote && c.buyNote[0].toUpperCase() + c.buyNote.slice(1);
+  const lp = named(sel.leaseCash || []);
+  c.leaseNote = lp.length ? `Extra cash on the lease: ${lp.join(' + ')}.` : '';
 }
 // Defaults: for each model year with offers, stack its eligible cash, try each of its APRs
 // (dropping cash that can't go with one), keep the cheapest; then the cheapest lease.
 function autoPick(c) {
   if (c.userPicked) { applySelection(c); return; }
   const sel = selection(c);
-  const cost = (variant, kind) => analyze(analysisInput([variant])).scenarios.find((x) => x.kind === kind)?.pvCost ?? Infinity;
+  const cost = (variant, kind) => analyze(analysisInput([variant])).scenarios.find((x) => x.kind === kind)?.monthly ?? Infinity;
   const fixed = Number(c.year) || null;
   const years = fixed ? [fixed] : [...new Set((c.offers || []).map(offerYear).filter(Boolean))];
   if (!years.length) years.push(null);
-  let best = { pv: Infinity, cash: [], finance: null, year: null };
-  for (const y of years) {
-    for (const f of [null, ...(c.offers || []).filter((o) => offerKind(o) === 'finance' && o.apr != null && yearOk(o, y))]) {
-      const cash = defaultCash(c, y, !!f);
-      const tmp = { ...c, buy: { ...c.buy }, lease: { ...c.lease, enabled: false }, selected: { cash, finance: f ? f.id : null, lease: null } };
-      applySelection(tmp);
-      const pv = cost(tmp, 'buy');
-      if (pv < best.pv) best = { pv, cash, finance: f ? f.id : null, year: y };
+  // With A/Z-Plan available, try the plan price (and only offers that combine with it) and the public price (every offer).
+  const azChoices = azEligible(c) && planPct() > 0 ? [false, true] : [false];
+  let best = { m: Infinity, cash: [], why: {}, finance: null, year: null, azOff: false };
+  for (const azOff of azChoices) {
+    for (const y of years) {
+      for (const f of [null, ...(c.offers || []).filter((o) => offerKind(o) === 'finance' && o.apr != null && yearOk(o, y))]) {
+        const st = stackFor({ ...c, azOff }, { year: y, mode: c.buy.payCash ? 'cash' : 'finance', specialApr: !!f });
+        const tmp = { ...c, azOff, buy: { ...c.buy }, lease: { ...c.lease, enabled: false }, selected: { cash: st.ids, finance: f ? f.id : null, lease: null } };
+        applySelection(tmp);
+        const m = cost(tmp, 'buy');
+        if (m < best.m) best = { m, cash: st.ids, why: Object.fromEntries(st.reasons.map((r) => [r.id, r.why])), finance: f ? f.id : null, year: y, azOff };
+      }
     }
   }
-  sel.cash = best.cash; sel.finance = best.finance; sel.year = best.year;
-  let bestLease = { id: null, pv: Infinity };
+  c.azOff = best.azOff;
+  sel.cash = best.cash; sel.finance = best.finance; sel.year = best.year; sel.why = { ...best.why };
+  let bestLease = { id: null, m: Infinity, cash: [] };
   for (const o of (c.offers || []).filter((x) => offerKind(x) === 'lease' && x.monthly && yearOk(x, fixed))) {
+    const st = stackFor(c, { year: offerYear(o), mode: 'lease', specialApr: true });
     const tmp = { ...c, lease: { ...c.lease }, buy: { ...c.buy, enabled: false } };
     applyLeaseOffer(tmp, o);
-    const pv = cost(tmp, 'lease');
-    if (pv < bestLease.pv) bestLease = { id: o.id, pv };
+    tmp.lease.addOnCash = String(st.total || '');
+    const m = cost(tmp, 'lease');
+    if (m < bestLease.m) bestLease = { id: o.id, m, cash: st.ids, why: Object.fromEntries(st.reasons.map((r) => [r.id, r.why])) };
   }
-  sel.lease = bestLease.id;
+  sel.lease = bestLease.id; sel.leaseCash = bestLease.cash; Object.assign(sel.why, bestLease.why || {});
   applySelection(c);
 }
 

@@ -325,6 +325,8 @@ function mapOffer(x) {
     acquisitionFee: o.acquisition_fee ?? null,
     validThrough: o.valid_through ?? null,
     disclaimer: o.disclaimers?.[0]?.slice(0, 400) ?? null,
+    // Full fine print (who qualifies, what it can't be combined with) for the stack builder.
+    text: [...(o.offers || []), ...(o.disclaimers || [])].join(' ').replace(/\s+/g, ' ').slice(0, 2500) || null,
     // The fine print that matters for stacking, kept separately so it isn't cut off.
     noSpecialApr: /not (?:compatible|combinable|available) with[^.]*(?:special|promo\w*)\s+(?:APR|lease|financ)/i.test((o.disclaimers || []).join(' ')),
     requiresCaptive: /must be (?:financed|leased)[^.]*(?:NMAC|Ford Credit|Toyota Financial|American Honda|Hyundai Motor Finance|captive)|financed or leased through/i.test((o.disclaimers || []).join(' ')),

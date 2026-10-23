@@ -163,6 +163,16 @@
     <label class="field check set-row"><input type="checkbox" id="setRunning"><span>Include gas, insurance and upkeep<small>Off: just what you pay for the car itself.</small></span></label>
     <label class="field set-row"><span>Miles you drive a year</span><span class="input has-suf"><input id="setMiles" inputmode="numeric"><span class="suf">mi</span></span></label>
     <label class="field set-row" id="setRateRow"><span>Interest your money could earn</span><span class="input has-suf"><input id="setRate" inputmode="decimal"><span class="suf">%</span></span><small>Used only for Cost of owning, to weigh money paid now against money paid later.</small></label>
+    <h3 class="set-h">Who’s buying</h3>
+    <p class="hint">Used to find loyalty, conquest, lease-renewal and group cash you qualify for.</p>
+    <label class="field set-row"><span>Other cars the household owns or leases</span><input id="eligOwned" placeholder="e.g. Toyota, Cadillac"><small>Makes, separated by commas. The leased car is counted automatically.</small></label>
+    <label class="field check set-row"><input type="checkbox" id="eligLease"><span id="eligLeaseLabel">Leasing through the brand’s finance company</span></label>
+    <div class="set-row"><span class="set-label">Anyone in the household</span>
+      <label class="field check"><input type="checkbox" id="elig-military"><span>Military or veteran</span></label>
+      <label class="field check"><input type="checkbox" id="elig-firstResponder"><span>First responder or nurse</span></label>
+      <label class="field check"><input type="checkbox" id="elig-college"><span>Recent college grad</span></label>
+      <label class="field check"><input type="checkbox" id="elig-costco"><span>Costco member</span></label>
+    </div>
     <button type="button" class="btn primary block" data-close>Done</button>
   </dialog>
 

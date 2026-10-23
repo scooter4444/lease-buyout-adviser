@@ -588,6 +588,10 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
 .o-t { min-width: 0; }
 .o-t b { font-weight: 600; font-size: 1rem; line-height: 1.25; }
 .o-t small { display: block; color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+.o-s { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.o-s .chip { font-size: 0.72rem; line-height: 1; padding: 4px 7px; border-radius: 999px; background: color-mix(in srgb, var(--ink, #14213D) 7%, transparent); color: var(--ink, #14213D); white-space: nowrap; }
+.o-s .chip.sum { background: color-mix(in srgb, #1E7A4C 14%, transparent); color: #1E7A4C; font-weight: 600; }
+@media (prefers-color-scheme: dark) { .o-s .chip { color: inherit; background: rgba(255,255,255,.08); } .o-s .chip.sum { color: #6FD3A0; } }
 .o-m { text-align: right; }
 .o-m b { display: block; font-size: 1.35rem; font-weight: 600; font-variation-settings: 'wdth' 118; letter-spacing: -0.015em; font-variant-numeric: tabular-nums; }
 .o-m small { display: block; color: var(--muted); font-size: 0.74rem; white-space: nowrap; }
@@ -617,3 +621,7 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
   .switcher { max-width: none; flex: 1; justify-content: space-between; margin-left: 4px; }
   #settingsBtn { margin-left: 0; }
 }
+.set-h { margin: 26px 0 4px; font-size: 1.05rem; color: var(--ink); font-variation-settings: 'wdth' 115; }
+#eligOwned { min-height: 48px; }
+.offer.no { opacity: 0.6; border-style: dashed; }
+.offer.no[aria-pressed="true"] { opacity: 1; }
