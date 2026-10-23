@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Lease Buyout Advisor</title>
+  <meta name="description" content="Buy out your lease, lease new, or buy new — compared on total cost.">
+  <meta name="theme-color" content="#14213D">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2314213D'/%3E%3Cpath d='M7 20l3-7h12l3 7v4H7z' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linejoin='round'/%3E%3Ccircle cx='11' cy='24' r='2' fill='%23fff'/%3E%3Ccircle cx='21' cy='24' r='2' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..800;1,100,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6"/><path d="M7 20l3-7h12l3 7v4H7z"/><circle cx="11" cy="24" r="2"/><circle cx="21" cy="24" r="2"/></svg>
+      <span>Lease Buyout Advisor</span>
+    </div>
+    <div class="usage" id="usage" aria-live="polite"></div>
+  </header>
+
+  <main class="layout">
+    <section class="inputs" aria-label="Inputs">
+
+      <form id="form" autocomplete="off" novalidate>
+        <fieldset class="block" id="car">
+          <legend><h2>Your leased car</h2></legend>
+          <div class="lookup">
+            <label class="field wide">
+              <span>VIN</span>
+              <input id="vin" data-path="current.vin" maxlength="17" spellcheck="false" autocapitalize="characters" placeholder="17 characters, on your registration or dash">
+            </label>
+            <button type="button" class="btn primary" id="lookupVin">Look up car</button>
+          </div>
+          <details class="plate">
+            <summary>No VIN handy? Use your license plate</summary>
+            <div class="lookup">
+              <label class="field"><span>State</span><select id="plateState" class="state-select"></select></label>
+              <label class="field"><span>Plate</span><input id="plate" autocapitalize="characters" spellcheck="false"></label>
+              <button type="button" class="btn" id="lookupPlate">Find VIN</button>
+            </div>
+          </details>
+          <p class="status" id="carStatus" role="status"></p>
+          <div class="car-id" id="carId" hidden></div>
+
+          <h3>Lease terms</h3>
+          <div class="grid" data-fields="lease"></div>
+
+          <h3>The car today</h3>
+          <div class="grid" data-fields="vehicle"></div>
+          <p class="hint" id="valueSource"></p>
+
+          <h3>If you buy it out</h3>
+          <div class="grid" data-fields="buyoutPay"></div>
+
+          <h3>Running costs</h3>
+          <p class="hint">Leave any of these blank and the app uses a typical figure for this car.</p>
+          <div class="grid" data-fields="running"></div>
+        </fieldset>
+
+        <fieldset class="block" id="compare">
+          <legend><h2>Compare against</h2></legend>
+          <p class="lede">Add the new cars you'd consider. Each gets priced as both a lease and a purchase, using local dealer prices and current manufacturer offers.</p>
+          <div id="candidates"></div>
+          <div class="add-row">
+            <button type="button" class="btn" id="addCandidate">Add a new car</button>
+            <button type="button" class="btn ghost" id="addSame">Add a new version of my car</button>
+          </div>
+        </fieldset>
+
+        <fieldset class="block" id="situation">
+          <legend><h2>Your situation</h2></legend>
+          <div class="grid" data-fields="situation"></div>
+          <details class="more">
+            <summary>Taxes, fees and fine print</summary>
+            <div class="grid" data-fields="fine"></div>
+          </details>
+        </fieldset>
+      </form>
+    </section>
+
+    <section class="results" id="results" aria-label="Results" aria-live="polite"></section>
+  </main>
+
+  <footer class="foot">
+    <p>Estimates, not offers. Market data from MarketCheck and auto.dev; depreciation, maintenance and insurance use typical curves you can override. Confirm the buyout quote, taxes and any offer with the lessor or dealer before signing.</p>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

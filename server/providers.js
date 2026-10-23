@@ -1,0 +1,323 @@
+// Data providers: MarketCheck (market value, new-car prices, incentives, recalls)
+// and auto.dev (VIN decode, listings, and paid-plan payments/APR/TCO if available).
+// Every call is cached and failures are returned as structured errors so the UI
+// can fall back to manual entry instead of breaking.
+import { getCached, setCached, countCall } from './cache.js';
+import * as mock from './mock.js';
+
+const MC_BASE = 'https://api.marketcheck.com';
+const AD_BASE = 'https://api.auto.dev';
+const MOCK = process.env.MOCK === '1';
+
+const mcKey = () => process.env.MARKETCHECK_API_KEY;
+const adKey = () => process.env.AUTODEV_API_KEY;
+
+export function configured() {
+  return { marketcheck: MOCK || !!mcKey(), autodev: MOCK || !!adKey(), mock: MOCK };
+}
+
+export class ProviderError extends Error {
+  constructor(provider, status, message) {
+    super(message);
+    this.provider = provider;
+    this.status = status;
+  }
+}
+
+function describe(status, body) {
+  const msg = body?.message || body?.error?.message || body?.error || body?.detail || '';
+  if (status === 401) return 'API key rejected';
+  if (status === 403) return `Not included in your plan${msg ? ` (${String(msg).slice(0, 120)})` : ''}`;
+  if (status === 429) return 'Rate limit or monthly quota reached';
+  if (status === 404) return 'No data found';
+  return `HTTP ${status}${msg ? `: ${String(msg).slice(0, 160)}` : ''}`;
+}
+
+async function getJSON(provider, url, { headers = {}, ttl, cacheKey }) {
+  const key = cacheKey || `${provider}:${url.replace(/(api_key|apiKey)=[^&]+/, '')}`;
+  const hit = getCached(key);
+  if (hit !== undefined) return hit;
+  countCall(provider);
+  const started = Date.now();
+  let res;
+  try {
+    res = await fetch(url, { headers: { Accept: 'application/json', ...headers }, signal: AbortSignal.timeout(20000) });
+  } catch (e) {
+    throw new ProviderError(provider, 0, `Network error: ${e.message}`);
+  }
+  const text = await res.text();
+  let body;
+  try { body = JSON.parse(text); } catch { body = { raw: text.slice(0, 300) }; }
+  const safeUrl = url.replace(/(api_key|apiKey)=[^&]+/, '$1=***');
+  console.log(`[${provider}] ${res.status} ${Date.now() - started}ms ${safeUrl} keys=${Object.keys(body || {}).slice(0, 12).join(',')}`);
+  if (!res.ok) throw new ProviderError(provider, res.status, describe(res.status, body));
+  setCached(key, body, ttl);
+  return body;
+}
+
+const qs = (o) => Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+
+function mc(path, params, ttl) {
+  if (MOCK) return mock.marketcheck(path, params);
+  if (!mcKey()) throw new ProviderError('marketcheck', 0, 'MARKETCHECK_API_KEY not set');
+  return getJSON('marketcheck', `${MC_BASE}${path}?${qs({ api_key: mcKey(), ...params })}`, { ttl });
+}
+
+function ad(path, params, ttl) {
+  if (MOCK) return mock.autodev(path, params);
+  if (!adKey()) throw new ProviderError('autodev', 0, 'AUTODEV_API_KEY not set');
+  const q = qs(params || {});
+  return getJSON('autodev', `${AD_BASE}${path}${q ? `?${q}` : ''}`, {
+    ttl,
+    headers: { Authorization: `Bearer ${adKey()}` },
+    cacheKey: `autodev:${path}?${q}`,
+  });
+}
+
+const DAY = 86400;
+const median = (xs) => {
+  const s = xs.filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b);
+  if (!s.length) return null;
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+
+async function attempt(fn) {
+  try { return { ok: true, data: await fn() }; } catch (e) {
+    return { ok: false, error: { provider: e.provider || 'app', status: e.status ?? 0, message: e.message } };
+  }
+}
+
+// ---------- Current vehicle ----------
+
+export async function lookupVehicle({ vin, miles, zip }) {
+  vin = String(vin || '').trim().toUpperCase();
+  if (!/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) throw new ProviderError('app', 400, 'VIN must be 17 characters (no I, O or Q)');
+  miles = Number(miles) || undefined;
+  const errors = [];
+  const sources = {};
+
+  // 1. Decode — auto.dev first (free tier), MarketCheck basic decode for MPG.
+  const [adDecode, mcSpecs] = await Promise.all([
+    attempt(() => ad(`/vin/${vin}`, null, 90 * DAY)),
+    attempt(() => mc(`/v2/decode/car/${vin}/specs`, {}, 90 * DAY)),
+  ]);
+  if (!adDecode.ok) errors.push(adDecode.error);
+  if (!mcSpecs.ok) errors.push(mcSpecs.error);
+  const d = adDecode.ok ? adDecode.data : {};
+  const s = mcSpecs.ok ? mcSpecs.data : {};
+  const city = Number(s.city_mpg) || null;
+  const hwy = Number(s.highway_mpg) || null;
+  const vehicle = {
+    vin,
+    year: Number(d.vehicle?.year || s.year) || null,
+    make: d.make || d.vehicle?.make || s.make || '',
+    model: d.model || d.vehicle?.model || s.model || '',
+    trim: d.trim || s.trim || '',
+    style: d.style || '',
+    body: d.body || s.body_type || '',
+    engine: d.engine || s.engine || '',
+    drivetrain: d.drive || s.drivetrain || '',
+    fuelType: s.fuel_type || '',
+    powertrain: s.powertrain_type || '',
+    mpg: city && hwy ? Math.round(0.55 * city + 0.45 * hwy) : (city || hwy || null),
+  };
+  if (adDecode.ok) sources.decode = 'auto.dev';
+  else if (mcSpecs.ok) sources.decode = 'MarketCheck';
+
+  // 2. Market value — MarketCheck Price, falling back to local comparable listings.
+  let valuation = null;
+  if (miles && zip) {
+    const price = await attempt(() => mc('/v2/predict/car/us/marketcheck_price', { vin, miles, zip, dealer_type: 'franchise' }, 2 * DAY));
+    if (price.ok && price.data?.marketcheck_price) {
+      valuation = { marketValue: price.data.marketcheck_price, msrp: price.data.msrp || null, method: 'MarketCheck Price™ (franchise dealer retail)' };
+      sources.value = 'MarketCheck';
+    } else {
+      if (!price.ok) errors.push(price.error);
+      if (vehicle.year && vehicle.make && vehicle.model) {
+        const comps = await comparables({ ...vehicle, miles, zip });
+        if (comps.ok) { valuation = comps.data; sources.value = comps.data.source; } else errors.push(comps.error);
+      }
+    }
+  }
+
+  // 3. Recalls (MarketCheck AutoRecalls; auto.dev as backup).
+  let recalls = null;
+  const mr = await attempt(() => mc(`/v2/car/autorecalls/${vin}`, {}, 7 * DAY));
+  if (mr.ok) {
+    const items = mr.data?.data?.items?.[0]?.recalls || [];
+    recalls = items.map((r) => ({
+      id: r.nhtsaNumber || r.oemRecallNumber,
+      title: r.recallTitle,
+      description: r.recallDescription,
+      risk: r.riskDescription,
+      remedy: r.remedyDescription,
+      status: r.status || r.recallState,
+      date: r.recallIssueDate,
+    }));
+    sources.recalls = 'AutoRecalls via MarketCheck';
+  } else {
+    errors.push(mr.error);
+    const ar = await attempt(() => ad(`/openrecalls/${vin}`, null, 7 * DAY));
+    if (ar.ok) {
+      const list = ar.data?.data || ar.data?.recalls || ar.data?.openRecalls || [];
+      recalls = (Array.isArray(list) ? list : []).map((r) => ({
+        id: r.nhtsaCampaignNumber || r.campaignNumber || r.NHTSACampaignNumber || r.id,
+        title: r.component || r.Component || r.title,
+        description: r.summary || r.Summary || r.description,
+        remedy: r.remedy || r.Remedy,
+        status: r.status || 'Open',
+        date: r.reportReceivedDate || r.date,
+      }));
+      sources.recalls = 'auto.dev';
+    } else errors.push(ar.error);
+  }
+
+  return { vehicle, valuation, recalls, sources, errors };
+}
+
+async function comparables({ year, make, model, trim, miles, zip }) {
+  // MarketCheck used-car comps first.
+  const mcTry = await attempt(() => mc('/v2/search/car/active', {
+    car_type: 'used', year, make, model, zip, radius: 100,
+    miles_range: `${Math.max(0, miles - 15000)}-${miles + 15000}`,
+    stats: 'price,miles', rows: 10,
+  }, DAY));
+  if (mcTry.ok) {
+    const st = mcTry.data?.stats?.price;
+    const med = st?.median || median((mcTry.data?.listings || []).map((l) => l.price));
+    if (med) {
+      return { ok: true, data: { marketValue: Math.round(med), msrp: null, method: `Median of ${mcTry.data.num_found} similar listings within 100 mi`, source: 'MarketCheck listings', comps: (mcTry.data.listings || []).slice(0, 5).map(slimListing) } };
+    }
+  }
+  // auto.dev listings (free tier) as the last resort.
+  const adTry = await attempt(() => ad('/listings', {
+    'vehicle.make': make, 'vehicle.model': model, 'vehicle.year': year, zip, distance: 100, limit: 20,
+  }, DAY));
+  if (adTry.ok) {
+    const prices = (adTry.data?.data || []).map((l) => l.retailListing?.price).filter((p) => p > 0);
+    const med = median(prices);
+    if (med) return { ok: true, data: { marketValue: Math.round(med), msrp: null, method: `Median asking price of ${prices.length} ${year} ${make} ${model} listings (auto.dev)`, source: 'auto.dev listings' } };
+  }
+  return { ok: false, error: (mcTry.ok ? adTry.error : mcTry.error) || { provider: 'app', status: 404, message: 'No comparable listings found' } };
+}
+
+function slimListing(l) {
+  return {
+    vin: l.vin,
+    price: l.price,
+    msrp: l.msrp,
+    miles: l.miles,
+    year: l.build?.year,
+    make: l.build?.make,
+    model: l.build?.model,
+    trim: l.build?.trim,
+    mpg: l.build?.city_mpg && l.build?.highway_mpg ? Math.round(0.55 * l.build.city_mpg + 0.45 * l.build.highway_mpg) : null,
+    dealer: l.dealer?.name,
+    city: l.dealer?.city,
+    state: l.dealer?.state,
+    url: l.vdp_url,
+    photo: l.media?.photo_links?.[0],
+  };
+}
+
+// ---------- New vehicle market ----------
+
+export async function newCarMarket({ year, make, model, trim, zip, radius = 100 }) {
+  if (!make || !model) throw new ProviderError('app', 400, 'make and model are required');
+  const errors = [];
+  const r = await attempt(() => mc('/v2/search/car/active', {
+    car_type: 'new', year, make, model, trim, zip, radius: Math.min(100, radius),
+    stats: 'price,msrp', rows: 12, sort_by: 'price', sort_order: 'asc', include_build_object: true,
+  }, 12 * 3600));
+  if (r.ok) {
+    const L = (r.data?.listings || []).map(slimListing);
+    const priceMed = r.data?.stats?.price?.median || median(L.map((l) => l.price));
+    const msrpMed = r.data?.stats?.msrp?.median || median(L.map((l) => l.msrp));
+    const mpg = median(L.map((l) => l.mpg));
+    return {
+      source: 'MarketCheck',
+      count: r.data?.num_found ?? L.length,
+      medianPrice: priceMed ? Math.round(priceMed) : null,
+      medianMsrp: msrpMed ? Math.round(msrpMed) : null,
+      lowPrice: r.data?.stats?.price?.min ?? (L[0]?.price || null),
+      mpg: mpg ? Math.round(mpg) : null,
+      listings: L,
+      errors,
+    };
+  }
+  errors.push(r.error);
+  const a = await attempt(() => ad('/listings', {
+    'vehicle.make': make, 'vehicle.model': model, 'vehicle.year': year || undefined, zip, distance: radius, limit: 20, sort: 'price.asc',
+  }, 12 * 3600));
+  if (a.ok) {
+    const rows = (a.data?.data || []).filter((l) => !l.retailListing?.used);
+    const prices = rows.map((l) => l.retailListing?.price).filter((p) => p > 0);
+    return {
+      source: 'auto.dev',
+      count: rows.length,
+      medianPrice: median(prices) ? Math.round(median(prices)) : null,
+      medianMsrp: null,
+      lowPrice: prices.length ? Math.min(...prices) : null,
+      mpg: null,
+      listings: rows.slice(0, 12).map((l) => ({
+        vin: l.vin, price: l.retailListing?.price, year: l.vehicle?.year, make: l.vehicle?.make, model: l.vehicle?.model,
+        trim: l.vehicle?.trim, dealer: l.retailListing?.dealer, city: l.retailListing?.city, state: l.retailListing?.state,
+        url: l.retailListing?.vdp, photo: l.retailListing?.primaryImage,
+      })),
+      errors,
+    };
+  }
+  errors.push(a.error);
+  return { source: null, count: 0, medianPrice: null, listings: [], errors };
+}
+
+export async function incentives({ make, model, year, zip }) {
+  if (!make) throw new ProviderError('app', 400, 'make is required');
+  const r = await attempt(() => mc('/v2/search/car/incentive/oem', { make, model, year, zip, rows: 10 }, DAY));
+  if (!r.ok) return { offers: [], errors: [r.error] };
+  const offers = (r.data?.listings || []).map((x) => {
+    const o = x.offer || {};
+    const amt = o.amounts?.[0] || {};
+    const term = amt.term ? (amt.term_unit === 'years' ? amt.term * 12 : amt.term) : null;
+    return {
+      id: x.id,
+      type: o.offer_type,
+      title: o.titles?.[0] || o.oem_program_name || '',
+      vehicles: (o.vehicles || []).map((v) => [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ')),
+      monthly: amt.monthly ?? null,
+      apr: amt.apr ?? null,
+      term,
+      dueAtSigning: o.due_at_signing ?? null,
+      cashback: o.cashback_amount ?? null,
+      msrp: o.msrp ?? null,
+      residual: o.lease_end_purchase_price ?? null,
+      mileageLimit: o.mileage_limit ?? null,
+      overMileageFee: o.over_mileage_fee ?? null,
+      dispositionFee: o.disposition_fee ?? null,
+      acquisitionFee: o.acquisition_fee ?? null,
+      validThrough: o.valid_through ?? null,
+      disclaimer: o.disclaimers?.[0]?.slice(0, 400) ?? null,
+    };
+  });
+  return { offers, count: r.data?.num_found ?? offers.length, errors: [] };
+}
+
+// ---------- auto.dev paid-plan extras (used only if the plan allows) ----------
+
+export async function autodevTco({ vin, zip }) {
+  const r = await attempt(() => ad(`/tco/${vin}`, { zip }, 30 * DAY));
+  return r.ok ? { tco: r.data?.tco || r.data?.data?.tco || null, errors: [] } : { tco: null, errors: [r.error] };
+}
+
+export async function autodevApr({ vin, year, make, model, zip, creditScore, vehicleAge, vehicleMileage }) {
+  const r = await attempt(() => ad(`/apr/${vin}`, { year, make, model, zip, creditScore, vehicleAge, vehicleMileage }, 7 * DAY));
+  return r.ok ? { apr: r.data?.apr || r.data?.data?.apr || null, errors: [] } : { apr: null, errors: [r.error] };
+}
+
+export async function plateToVin({ state, plate }) {
+  const r = await attempt(() => ad(`/plate/${encodeURIComponent(state)}/${encodeURIComponent(plate)}`, null, 30 * DAY));
+  if (!r.ok) return { vin: null, errors: [r.error] };
+  const d = r.data?.data || r.data;
+  return { vin: d?.vin || d?.VIN || null, errors: [] };
+}

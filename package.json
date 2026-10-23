@@ -1,0 +1,18 @@
+{
+  "name": "lease-buyout-advisor",
+  "version": "1.0.0",
+  "description": "Should you buy out your lease, lease new, or buy new? Total-cost comparison using MarketCheck and auto.dev data.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
