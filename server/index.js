@@ -49,6 +49,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.get('/api/status', (_req, res) => {
   const usage = usageThisMonth();
   res.json({
+    version: BUILD,
     providers: { ...configured(), ask: askConfigured(), cutouts: cutoutsConfigured() },
     usage,
     limits: { marketcheck: Number(process.env.MARKETCHECK_MONTHLY_LIMIT || 500), autodev: Number(process.env.AUTODEV_MONTHLY_LIMIT || 1000) },
@@ -145,6 +146,13 @@ app.get('/api/share/:token', (req, res) => {
 app.get('/s/:token', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'share.html')));
 
 app.get('/vendor/zxing.js', (_req, res) => res.sendFile(path.join(__dirname, '..', 'node_modules', '@zxing', 'library', 'umd', 'index.min.js'), { maxAge: '7d' }));
+// The page carries the build it was served with; the app reloads itself if the server is newer.
+const BUILD = (process.env.RAILWAY_GIT_COMMIT_SHA || 'dev').slice(0, 7);
+const INDEX = path.join(__dirname, '..', 'public', 'index.html');
+app.get(['/', '/index.html'], (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('html').send(fs.readFileSync(INDEX, 'utf8').replaceAll('{{BUILD}}', BUILD).replace(/(src|href)="(app\.js|styles\.css)"/g, `$1="$2?v=${BUILD}"`));
+});
 // App code and data always revalidate (cheap with ETags), so a fix shows on the next reload;
 // images and logos can be cached for a day.
 app.use(express.static(path.join(__dirname, '..', 'public'), {

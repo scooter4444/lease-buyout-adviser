@@ -1906,6 +1906,12 @@ function applyLeaseOffer(c, o) {
 async function refreshUsage() {
   try {
     const s = await api('api/status');
+    // A phone can hold on to an old copy of the app: if the server is newer, reload once.
+    const mine = document.querySelector('meta[name="app-build"]')?.content;
+    if (s.version && mine && !mine.includes('{{') && s.version !== mine) {
+      let tried = null; try { tried = sessionStorage.getItem('reloadedFor'); } catch {}
+      if (tried !== s.version) { try { sessionStorage.setItem('reloadedFor', s.version); } catch {} location.reload(); return; }
+    }
     if (s.providers?.cutouts && !cutoutsOn) { cutoutsOn = true; ensurePhotos(); }
     const mc = s.usage?.marketcheck || 0; const ad = s.usage?.autodev || 0;
     const left = s.limits.marketcheck - mc;
@@ -1913,7 +1919,7 @@ async function refreshUsage() {
     if (s.providers.mock) parts.push('<b>Demo data</b>');
     parts.push(`MarketCheck <b class="${left < 60 ? 'low' : ''}">${mc}/${s.limits.marketcheck}</b>`);
     parts.push(`auto.dev <b>${ad}/${s.limits.autodev}</b>`);
-    $('#usage').innerHTML = `<span>${parts.join('</span> <span>')}</span> <span class="cap">calls this month</span>`;
+    $('#usage').innerHTML = `<span>${parts.join('</span> <span>')}</span> <span class="cap">calls this month</span>${s.version ? ` <span class="cap">· version ${esc(s.version)}</span>` : ''}`;
   } catch { $('#usage').textContent = ''; }
 }
 
