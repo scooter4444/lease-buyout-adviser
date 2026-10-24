@@ -189,3 +189,13 @@ test('state tax details: Florida surtax only on the first $5,000; Highlands Ranc
   assert.equal(registrationAnnual({ state: 'MI', msrp: 45000, ageYears: 0 }), 178 + 15 * 6);
   assert.equal(registrationAnnual({ state: 'CO', msrp: 45000, ageYears: 0 }), Math.round(0.85 * 45000 * 0.021 + 110));
 });
+
+test('lease extra cash is capped so a stacked mistake can’t erase the payments', async () => {
+  const { analyze } = await import('../public/engine.js');
+  const base = { assumptions: { state: 'FL', zip: '34287', horizonYears: 2, costMode: 'payments' }, current: { make: 'Ford', model: 'Edge', year: 2024, buyoutPrice: 24481, marketValue: 26000, leaseEndDate: '2027-01-20' } };
+  const car = (cash) => ({ id: 'sf', make: 'Hyundai', model: 'Santa Fe', year: 2026, msrp: 36650, sellingPrice: 35000, buy: { enabled: false }, lease: { enabled: true, monthly: '199', dueAtSigning: '3999', termMonths: '24', source: 'offer', addOnCash: String(cash) } });
+  const m = (cash) => analyze({ ...base, candidates: [car(cash)] }).scenarios.find((s) => s.kind === 'lease').monthly;
+  const plain = m(0);
+  assert.ok(plain > 330 && plain < 420, `plain ${plain}`);
+  assert.ok(m(7000) > 199 * 0.75 * 1.0, `capped ${m(7000)}`); // payments can only drop by a quarter
+});

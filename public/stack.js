@@ -110,7 +110,7 @@ export function classify(o) {
   const purchaseOnly = /purchase only|retail purchase|when purchasing|who purchase|on the purchase of|purchase allowance/i.test(text) && !/purchase or lease|lease or purchase/i.test(text);
   return {
     kind, audience, affinity, makes, excludes, needsCaptive,
-    appliesToLease: kind === 'cash' ? (leaseOnly || /purchase or lease|lease or purchase|leas(?:e|ing)/i.test(text)) && !purchaseOnly : kind === 'lease',
+    appliesToLease: kind === 'cash' ? (leaseOnly || /purchase or lease|lease or purchase|lease or finance|finance or lease|purchase,? (?:finance )?or lease|(?:toward|on|for|with) (?:a |an |the )?(?:new )?(?:purchase or )?lease\b|lease (?:customers|contracts?|deals?)/i.test(text)) && !purchaseOnly && !/not (?:available|valid|eligible|combinable|applicable)[^.]{0,80}leas|excludes? leases?|leases? (?:are |is )?(?:not eligible|excluded|ineligible)|no leases/i.test(text) : kind === 'lease',
     appliesToPurchase: kind === 'cash' ? !leaseOnly : kind === 'finance',
     programs: programs(text),
     key: `${audience}|${affinity || ''}|${titleKey}`,
@@ -198,6 +198,7 @@ export function bestStack(offers, opts) {
     let why = el.ok ? null : el.why;
     if (!why && mode === 'cash' && cls.needsCaptive) why = 'Needs the brand’s own financing';
     if (!why && mode === 'lease' && !cls.appliesToLease) why = 'Purchase only';
+    if (!why && mode === 'lease' && cls.audience === 'public') why = 'Already in the advertised lease payment';
     if (!why && mode !== 'lease' && !cls.appliesToPurchase) why = 'Lease only';
     if (!why && specialApr && cls.excludes.has('special-apr')) why = mode === 'lease' ? 'Not with the factory lease deal' : 'Not with the special APR';
     if (!why && azActive && cls.excludes.has('private')) why = 'Not with A/Z-Plan pricing';

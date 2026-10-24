@@ -48,3 +48,15 @@ test('cash that needs the brand’s financing is dropped when paying cash', () =
   assert.equal(bestStack(offers, { elig: carol, make: 'Hyundai', mode: 'cash' }).total, 2000);
   assert.equal(bestStack(offers, { elig: carol, make: 'Hyundai', mode: 'finance' }).total, 3000);
 });
+
+test('lease: public rebates are never stacked on an advertised lease; targeted ones are', () => {
+  const offers = [
+    { id: 'rb', type: 'cash', cashback: 3000, title: 'Retail Bonus Cash', text: 'Retail Bonus Cash; not available with HMF Special APR or lease offers.' },
+    { id: 'lc', type: 'cash', cashback: 1500, title: 'Lease Bonus Cash', text: 'Lease Bonus Cash toward a new lease through HMF.' },
+    { id: 'mil', type: 'cash', cashback: 500, title: 'Military Program', group: 'Military personnel', text: 'Available on purchase or lease for active and veteran military.' },
+  ];
+  const s = bestStack(offers, { elig: { ...carol, household: ['Toyota', 'Cadillac', 'Ford'] }, make: 'Hyundai', mode: 'lease', specialApr: true });
+  assert.deepEqual(s.ids, ['mil']);
+  assert.equal(s.total, 500);
+  assert.match(s.blocked.find((b) => b.id === 'rb').why, /Purchase only|advertised/);
+});

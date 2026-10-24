@@ -742,7 +742,7 @@ let saveTimer;
 function snapshot() {
   const profiles = {};
   for (const [id, p] of Object.entries(store.profiles)) {
-    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, safetyPrefs: p.safetyPrefs, regionInfo: p.regionInfo, needsOfferRefresh: p.needsOfferRefresh, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
+    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, safetyPrefs: p.safetyPrefs, stackVersion: p.stackVersion, regionInfo: p.regionInfo, needsOfferRefresh: p.needsOfferRefresh, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
   }
   return JSON.stringify({ active: store.active, rev: store.rev || 0, profiles });
 }
@@ -773,6 +773,7 @@ function hydrate(p) {
     eligibility: { leaseCaptive: true, ...(p.eligibility || {}) },
     regionInfo: { ...(p.regionInfo || {}) },
     safetyPrefs: { ...(p.safetyPrefs || {}) },
+    stackVersion: p.stackVersion || 0,
     needsOfferRefresh: !!p.needsOfferRefresh,
     current: { ...b.current, ...p.current },
     candidates: (p.candidates || []).map((c) => blankCandidate({ ...c, buy: { ...blankCandidate().buy, ...c.buy }, lease: { ...blankCandidate().lease, ...c.lease } })),
@@ -823,7 +824,11 @@ function fixedPhotos(id, p) {
 }
 function afterLoad() {
   let fixed = false;
-  for (const [id, p] of Object.entries(store.profiles)) { fixed = fixedPhotos(id, p) || fixed; fixed = knownHousehold(id, p) || fixed; fixed = knownPlaces(id, p) || fixed; }
+  for (const [id, p] of Object.entries(store.profiles)) {
+    fixed = fixedPhotos(id, p) || fixed; fixed = knownHousehold(id, p) || fixed; fixed = knownPlaces(id, p) || fixed;
+    // Stacking rules changed (no public rebates on advertised leases): re-pick saved offers once.
+    if ((p.stackVersion || 0) < 2) { for (const c of p.candidates || []) if (c.offers?.length && !c.userPicked) c.needsPick = true; p.stackVersion = 2; fixed = true; }
+  }
   if (fixed) setTimeout(() => persist(), 0);
   for (const p of Object.values(store.profiles)) {
     for (const c of p.candidates) if (c.needsPick) { const keep = state; state = p; autoPick(c); state = keep; delete c.needsPick; }

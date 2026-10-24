@@ -566,8 +566,11 @@ export function leaseNewScenario(n, v, H, exit) {
   }
   // Extra cash you qualify for (loyalty, conquest, military...) goes against the money due
   // at signing first; anything left lowers the payments.
-  const addOn = Math.max(0, L.addOnCash || 0);
   const due0 = L.dueAtSigning ?? (monthly * (1 + a.leaseTaxPct / 100) + a.docFee);
+  // Guard: extra cash can wipe out what's due at signing but trim payments by at most a quarter.
+  // Anything more almost always means cash already built into the advertised payment got counted twice.
+  const addOnAsked = Math.max(0, L.addOnCash || 0);
+  const addOn = Math.min(addOnAsked, Math.max(0, due0) + 0.25 * monthly * L.termMonths);
   const fromDue = Math.min(addOn, Math.max(0, due0));
   const taxed = Math.max(0, monthly - (addOn - fromDue) / L.termMonths) * (1 + a.leaseTaxPct / 100);
   const due = due0 - fromDue;
@@ -613,6 +616,7 @@ export function leaseNewScenario(n, v, H, exit) {
     source: estimated ? 'estimate' : L.source,
     notes: [
       `${estimated ? 'Estimated' : 'Offer'}: $${round(monthly)}/mo + tax for ${T} mo, $${round(due)} due at signing`,
+      addOn ? `Includes $${round(addOn)} of extra cash you qualify for${addOnAsked > addOn ? ` (capped; $${round(addOnAsked)} was stacked, which looks double-counted)` : ''}` : null,
       overMiles > 0 ? `About ${round(overMiles)} miles over the ${round(L.annualMileage)}/yr allowance per term` : null,
       'You own nothing at the end',
     ].filter(Boolean),
