@@ -145,7 +145,15 @@ app.get('/api/share/:token', (req, res) => {
 app.get('/s/:token', (_req, res) => res.sendFile(path.join(__dirname, '..', 'public', 'share.html')));
 
 app.get('/vendor/zxing.js', (_req, res) => res.sendFile(path.join(__dirname, '..', 'node_modules', '@zxing', 'library', 'umd', 'index.min.js'), { maxAge: '7d' }));
-app.use(express.static(path.join(__dirname, '..', 'public'), { extensions: ['html'], maxAge: '5m' }));
+// App code and data always revalidate (cheap with ETags), so a fix shows on the next reload;
+// images and logos can be cached for a day.
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  extensions: ['html'],
+  setHeaders: (res, file) => {
+    if (/\.(html|js|css|json)$/.test(file)) res.setHeader('Cache-Control', 'no-cache');
+    else res.setHeader('Cache-Control', 'public, max-age=86400');
+  },
+}));
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => {
