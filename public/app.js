@@ -2,7 +2,7 @@ import { analyze, leaseTermsFromOffer, STATE_TAX, NO_TRADE_TAX_CREDIT, taxDefaul
 import { SEGMENTS, segmentFor, suggestions, AZ_MAKES } from './segments.js';
 import { logoUrl, logoIsMono } from './logos.js';
 import { bestStack, classify, eligible, regionOk } from './stack.js';
-import { renderSafety, loadSafety } from './safety.js';
+import { renderSafety, loadSafety, renderCompare3 } from './safety.js';
 
 // ---------- State ----------
 const STORAGE_KEY = 'lba:v2';
@@ -394,6 +394,7 @@ function compareChart(priced, buyout) {
 }
 
 function renderModels() {
+  renderCompare3Tab();
   renderIdeas();
   renderDeals();
   const seg = state.segment || segmentFor({ make: state.current.make, model: state.current.model, body: state.lookup?.vehicle?.body });
@@ -1845,6 +1846,30 @@ function renderSafetyTab() {
       const what = `${used ? 'Used' : 'New'}${car.year ? ` ${car.year}` : ''}${car.trim ? ` ${car.trim}` : ''}`;
       return rec?.researched && rec.trim && norm2(rec.trim) !== norm2(car.trim) ? `${what} · rated as ${rec.year} ${rec.trim}` : what;
     },
+  });
+}
+// Compare tab: up to three cars side by side, with the app's own monthly cost for each.
+function costFor(car, mine) {
+  const r = lastAnalysis;
+  if (!r) return null;
+  const pick = mine ? r.scenarios.filter((s) => s.kind === 'buyout') : r.scenarios.filter((s) => s.candidateId === car.id);
+  const s = pick.sort((a, b) => a.monthly - b.monthly)[0];
+  if (!s) return null;
+  const pay = payText(s);
+  return { monthly: s.monthly, how: `${s.kind === 'lease' ? 'Lease' : s.kind === 'buyout' ? 'Buy out' : 'Buy'}${pay ? `, ${pay}` : ''}` };
+}
+function renderCompare3Tab() {
+  state.safetyPrefs ||= {};
+  renderCompare3($('#compare3'), {
+    current: state.current, candidates: state.candidates.filter((c) => c.make && c.model),
+    prefs: state.safetyPrefs, save: () => persist(), rerender: () => renderCompare3Tab(),
+    api, esc, logoHTML, zip: state.assumptions.zip, costFor,
+    openSafety: () => { setTab('safety'); },
+    photoHTML: (car, mine) => {
+      const ph = mine ? (state.photo?.url ? state.photo : null) : (photoOf(car) ? { url: photoOf(car), custom: !!car.photo?.cutout } : null);
+      return imgHTML(ph?.url, [car.year, car.make, car.model].filter(Boolean).join(' '), phCls(ph, 'contain'));
+    },
+    sub: () => '',
   });
 }
 const norm2 = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');

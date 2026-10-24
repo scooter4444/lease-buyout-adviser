@@ -518,3 +518,114 @@ function wire(el, ctx, list) {
     start = null;
   });
 }
+
+// ---------- Compare: up to three side by side (Compare tab) ----------
+// ctx: as renderSafety, plus costFor(car, mine) -> { monthly, how } from the live analysis, and openSafety(view, id).
+function buildList(ctx) {
+  const seen = new Set(), list = [];
+  const add = (car, mine) => {
+    if (!car?.make || !car?.model) return;
+    const k = `${norm(car.make)}|${norm(car.model)}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    const rec = recordFor(car, ctx);
+    list.push({ mine, car, rec, photoHTML: ctx.photoHTML(car, mine), sub: ctx.sub(car, mine, rec), cost: ctx.costFor ? ctx.costFor(car, mine) : null });
+  };
+  add(ctx.current, true);
+  for (const c of ctx.candidates) add(c, false);
+  return list;
+}
+
+const CLIMATE = { physical: 3, mixed: 2, touchscreen: 1 };
+const capWord = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '–');
+function c3Rows(want) {
+  const tileRow = (k, label) => ({ label, cell: (c) => ({ tile: c.iihs?.unchecked ? null : c.iihs?.[k] ?? null, t: c.iihs?.unchecked ? 'Not checked' : tile(c.iihs?.[k]).word, v: c.iihs?.unchecked ? null : 'npmag'.indexOf(tile(c.iihs?.[k]).cls) }) });
+  const dimRow = (k, label, unit, opts = {}) => ({ label, ...opts, cell: (c, edge) => {
+    const v = c.dims?.[k];
+    if (v == null) return { t: '–', v: null };
+    const d = edge && !opts.mineRow && edge.dims?.[k] != null ? Math.round((v - edge.dims[k]) * 10) / 10 : null;
+    return { t: `${v} ${unit}`, small: d ? `${d > 0 ? '+' : '−'}${Math.abs(d)} vs. Edge` : '', v };
+  } });
+  return [
+    { h: 'Cost' },
+    { label: 'A month', less: true, cell: (c, _e, x) => (x.cost?.monthly ? { t: `$${Math.round(x.cost.monthly).toLocaleString()}`, v: x.cost.monthly } : { t: 'Price it on Compare', v: null }) },
+    { label: 'How', neutral: true, cell: (c, _e, x) => ({ t: x.cost?.how || '–', v: null, small: '' }) },
+    { h: 'Safety, IIHS first' },
+    { label: 'IIHS award', cell: (c) => ({ t: award(c).short, v: c.iihs?.unchecked ? null : c.iihs?.award ? (c.iihs.award === 'TSP+' ? 20 : 10) - (2026 - (c.iihs.awardYear || 2026)) : 0 }) },
+    tileRow('smallOverlapDriver', 'Small overlap front, driver'),
+    tileRow('sideUpdated', 'Side crash, updated test'),
+    tileRow('moderateOverlapUpdated', 'Front crash, rear seat'),
+    tileRow('headlights', 'Headlights'),
+    { label: 'NHTSA overall', cell: (c) => ({ stars: c.nhtsa?.overall || 0, t: c.nhtsa?.overall ? '' : 'Not rated', v: c.nhtsa?.overall ?? null }) },
+    { label: 'Recalls this model year', less: true, cell: (c) => ({ t: c.nhtsa?.recalls ?? '–', v: c.nhtsa?.recalls ?? null }) },
+    { h: 'Her must-haves' },
+    ...FEATS.filter((f) => want.has(f.k)).map((f) => ({ label: f.label, cell: (c) => { const v = c.feat?.[f.k]; return { t: has(v) ? '✓' : v === 'optional' ? 'Option' : v === false ? '–' : '?', v: v == null ? null : lvl(v), aria: featWord(v) }; } })),
+    { h: 'Size and feel' },
+    dimRow('lengthIn', 'Length', 'in', { neutral: true }),
+    dimRow('heightIn', 'Height', 'in', { neutral: true }),
+    dimRow('cargoBehind2ndCuFt', 'Cargo behind rear seat', 'cu ft'),
+    dimRow('turningCircleFt', 'Turning circle', 'ft', { less: true }),
+    { label: 'Climate controls', cell: (c) => ({ t: capWord(c.ease?.climateControls), v: CLIMATE[c.ease?.climateControls] ?? null }) },
+    { h: 'Reviews' },
+    { label: 'Reviewer score', cell: (c) => ({ t: c.review?.scoreN ? `${c.review.scoreN}/10` : '–', v: c.review?.scoreN ?? null }) },
+  ];
+}
+
+export function renderCompare3(el, ctx) {
+  if (!el) return;
+  if (!DATA) { el.innerHTML = ''; loadSafety().then(() => ctx.rerender()); return; }
+  const { esc } = ctx;
+  const list = buildList(ctx);
+  const mine = list.find((x) => x.mine);
+  const others = list.filter((x) => !x.mine);
+  if (!mine || !others.length) { el.innerHTML = ''; return; }
+  let picks = (ctx.prefs.compare || []).filter((id) => others.some((x) => x.rec.id === id));
+  if (!picks.length) picks = others.slice(0, 2).map((x) => x.rec.id);
+  const cols = [mine, ...picks.map((id) => others.find((x) => x.rec.id === id))].filter(Boolean);
+  const want = new Set(ctx.prefs.want || DEFAULT_WANT);
+  const rows = c3Rows(want).map((R) => {
+    if (R.h) return `<div class="c3-h" role="row"><span role="columnheader">${esc(R.h)}</span></div>`;
+    const cells = cols.map((x) => R.cell(x.rec, mine.rec, x));
+    const nums = cells.map((c) => c.v).filter((v) => v != null && v >= 0);
+    const spread = nums.length > 1 && Math.max(...nums) !== Math.min(...nums);
+    const best = R.neutral || !spread ? null : R.less ? Math.min(...nums) : Math.max(...nums);
+    return `<div class="c3-row" role="row">
+      <span class="c3-label" role="rowheader">${esc(R.label)}</span>
+      ${cells.map((c) => `<span class="c3-cell${best != null && c.v === best ? ' win' : ''}" role="cell"${c.aria ? ` aria-label="${esc(c.aria)}"` : ''}>${c.tile !== undefined ? tileHTML(c.tile, esc) : ''}${c.stars ? stars(c.stars) : ''}<span>${esc(c.t)}</span>${c.small ? `<small>${esc(c.small)}</small>` : ''}</span>`).join('')}
+    </div>`;
+  }).join('');
+  el.innerHTML = `
+    <div class="c3-intro"><h2>Up to three, side by side</h2><p>Her Edge stays first. Pick two more.</p></div>
+    <div class="s-chips scroll" role="group" aria-label="Cars to compare">
+      ${others.map((x) => { const on = picks.includes(x.rec.id); return `<button type="button" class="s-chip" data-c3="pick" data-k="${esc(x.rec.id)}" aria-pressed="${on}">${on ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>' : ''}${esc(`${x.rec.make} ${x.rec.model}`)}</button>`; }).join('')}
+    </div>
+    <div class="c3-table" role="table" aria-label="Side by side comparison" style="--cols:${cols.length}">
+      <div class="c3-top" role="row">
+        <span class="sr-only" role="columnheader">Item</span>
+        ${cols.map((x) => `<div class="c3-car" role="columnheader"><div class="s-pic">${x.photoHTML}</div>${ctx.logoHTML(x.rec.make, 'inline')}<b>${esc(x.mine ? `Her ${x.rec.year} ${x.rec.model}` : `${x.rec.make} ${x.rec.model}`)}</b></div>`).join('')}
+      </div>
+      ${rows}
+      <div class="c3-row c3-links" role="row">
+        <span class="c3-label" role="rowheader">See more</span>
+        ${cols.map((x) => `<span class="c3-cell" role="cell"><button type="button" class="btn small ghost" data-c3="spin" data-k="${esc(x.rec.id)}">360°</button><button type="button" class="btn small ghost" data-c3="tests" data-k="${esc(x.rec.id)}">Crash tests</button></span>`).join('')}
+      </div>
+    </div>
+    <p class="fine">Bold is the best of the ${cols.length}. Monthly is what the app works out on the Options tab for the period in Settings; equipment is for the trim in each deal.</p>`;
+  if (!el.dataset.wired) {
+    el.dataset.wired = '1';
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-c3]');
+      if (!b) return;
+      const c = el._ctx, k = b.dataset.k;
+      if (b.dataset.c3 === 'pick') {
+        const cur = (c.prefs.compare || []).filter((id) => el._others.includes(id));
+        const p = cur.length ? cur : el._picks.slice();
+        const i = p.indexOf(k);
+        if (i >= 0) p.splice(i, 1); else { p.push(k); if (p.length > 2) p.shift(); }
+        c.prefs.compare = p; c.save(); c.rerender();
+      } else if (b.dataset.c3 === 'spin') { ui.spin = k; ui.frame = 0; ui.view = 'spin'; c.openSafety(); }
+      else if (b.dataset.c3 === 'tests') { ui.tests = k; ui.view = 'tests'; c.openSafety(); }
+    });
+  }
+  el._ctx = ctx; el._others = others.map((x) => x.rec.id); el._picks = picks;
+}

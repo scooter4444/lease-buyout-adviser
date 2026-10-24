@@ -89,7 +89,23 @@
    },
    "reliability": "Reliability: 3.5/5 (RepairPal)",
    "year": 2024,
-   "trim": "SEL AWD"
+   "trim": "SEL AWD",
+   "dims": {
+    "lengthIn": 188.8,
+    "widthIn": 75.9,
+    "heightIn": 68.3,
+    "wheelbaseIn": 112.2,
+    "groundClearanceIn": 8.0,
+    "turningCircleFt": 39.3,
+    "cargoBehind2ndCuFt": 39.2,
+    "cargoMaxCuFt": 73.4
+   },
+   "ease": {
+    "climateControls": "touchscreen",
+    "volumeKnob": true,
+    "gearSelector": "rotary dial",
+    "reviewEaseNote": "the main controls are easy enough, but climate and secondary controls feel dated (Edmunds)"
+   }
   },
   {
    "id": "santafe",
@@ -175,7 +191,23 @@
    },
    "reliability": "Reliability: 3.5/5 Above Average (RepairPal)",
    "year": 2026,
-   "trim": "SE AWD"
+   "trim": "SE AWD",
+   "dims": {
+    "lengthIn": 190.2,
+    "widthIn": 74.8,
+    "heightIn": 67.7,
+    "wheelbaseIn": 110.8,
+    "groundClearanceIn": 7.0,
+    "turningCircleFt": 37.9,
+    "cargoBehind2ndCuFt": 40.5,
+    "cargoMaxCuFt": 79.6
+   },
+   "ease": {
+    "climateControls": "mixed",
+    "volumeKnob": true,
+    "gearSelector": "column stalk",
+    "reviewEaseNote": "the touch climate panel has small fan icons that are hard to use on the move, and the column shifter takes getting used to (Consumer Reports)"
+   }
   },
   {
    "id": "sorento",
@@ -259,7 +291,23 @@
    },
    "reliability": "Reliability: 4/5 Above Average (RepairPal)",
    "year": 2026,
-   "trim": "LX FWD"
+   "trim": "LX FWD",
+   "dims": {
+    "lengthIn": 189.6,
+    "widthIn": 74.8,
+    "heightIn": 66.7,
+    "wheelbaseIn": 110.8,
+    "groundClearanceIn": 6.9,
+    "turningCircleFt": 37.9,
+    "cargoBehind2ndCuFt": 38.5,
+    "cargoMaxCuFt": 75.5
+   },
+   "ease": {
+    "climateControls": "mixed",
+    "volumeKnob": true,
+    "gearSelector": "rotary dial",
+    "reviewEaseNote": "one touch panel switches between audio and climate, so you have to glance down to see what the knob controls (CarPro)"
+   }
   },
   {
    "id": "murano",
@@ -341,7 +389,23 @@
    },
    "reliability": "Reliability: 4/5 Above Average (RepairPal)",
    "year": 2026,
-   "trim": "SL AWD"
+   "trim": "SL AWD",
+   "dims": {
+    "lengthIn": 192.9,
+    "widthIn": 78.0,
+    "heightIn": 67.9,
+    "wheelbaseIn": 111.2,
+    "groundClearanceIn": 8.3,
+    "turningCircleFt": null,
+    "cargoBehind2ndCuFt": 32.9,
+    "cargoMaxCuFt": 63.5
+   },
+   "ease": {
+    "climateControls": "touchscreen",
+    "volumeKnob": true,
+    "gearSelector": "push buttons",
+    "reviewEaseNote": "haptic touch climate icons are small and hard to tap on the first try (Jax Today)"
+   }
   },
   {
    "id": "explorer",
@@ -433,7 +497,23 @@
    },
    "reliability": "Reliability: 3.5/5 Above Average (RepairPal)",
    "year": 2026,
-   "trim": "Active"
+   "trim": "Active",
+   "dims": {
+    "lengthIn": 198.7,
+    "widthIn": 78.9,
+    "heightIn": 69.6,
+    "wheelbaseIn": 119.1,
+    "groundClearanceIn": 7.6,
+    "turningCircleFt": 38.7,
+    "cargoBehind2ndCuFt": 46.0,
+    "cargoMaxCuFt": 85.8
+   },
+   "ease": {
+    "climateControls": "touchscreen",
+    "volumeKnob": true,
+    "gearSelector": "rotary dial",
+    "reviewEaseNote": "moving climate controls into the touchscreen hurts ergonomics - adjusting the fan takes your eyes off the road (Motor1)"
+   }
   },
   {
    "id": "nautilus",
@@ -514,7 +594,23 @@
    },
    "reliability": "Reliability: Predicted average reliability (Consumer Reports)",
    "year": 2026,
-   "trim": "Premiere AWD"
+   "trim": "Premiere AWD",
+   "dims": {
+    "lengthIn": 193.2,
+    "widthIn": 76.9,
+    "heightIn": 68.2,
+    "wheelbaseIn": 114.2,
+    "groundClearanceIn": 8.0,
+    "turningCircleFt": 37.5,
+    "cargoBehind2ndCuFt": 36.4,
+    "cargoMaxCuFt": 71.3
+   },
+   "ease": {
+    "climateControls": "touchscreen",
+    "volumeKnob": true,
+    "gearSelector": "push buttons",
+    "reviewEaseNote": "software-only vent and climate adjustment is distracting while driving (CarPro), though The Drive found the screen software very intuitive"
+   }
   },
   {
    "id": "gv70",
@@ -599,7 +695,23 @@
    },
    "reliability": "Reliability: Predicted below-average reliability (Consumer Reports)",
    "year": 2026,
-   "trim": "2.5T AWD"
+   "trim": "2.5T AWD",
+   "dims": {
+    "lengthIn": 185.6,
+    "widthIn": 75.2,
+    "heightIn": 64.2,
+    "wheelbaseIn": 113.2,
+    "groundClearanceIn": 7.3,
+    "turningCircleFt": 37.7,
+    "cargoBehind2ndCuFt": 28.9,
+    "cargoMaxCuFt": 56.9
+   },
+   "ease": {
+    "climateControls": "mixed",
+    "volumeKnob": true,
+    "gearSelector": "rotary dial",
+    "reviewEaseNote": "rotary shifter and similar-size infotainment controller sit inches apart and are easy to grab by mistake, though big icons make the system easy to navigate (AutoGuide)"
+   }
   },
   {
    "id": "passport",
@@ -682,7 +794,23 @@
    },
    "reliability": "Reliability: Predicted much better than average (Consumer Reports)",
    "year": 2026,
-   "trim": "RTL"
+   "trim": "RTL",
+   "dims": {
+    "lengthIn": 191.5,
+    "widthIn": 79.4,
+    "heightIn": 73.1,
+    "wheelbaseIn": 113.6,
+    "groundClearanceIn": 8.3,
+    "turningCircleFt": 38.9,
+    "cargoBehind2ndCuFt": 44.0,
+    "cargoMaxCuFt": 83.8
+   },
+   "ease": {
+    "climateControls": "physical",
+    "volumeKnob": true,
+    "gearSelector": "push buttons",
+    "reviewEaseNote": "plenty of real knobs and buttons make it very easy to live with (Edmunds long-term test)"
+   }
   },
   {
    "id": "nx",
@@ -763,7 +891,23 @@
    },
    "reliability": "",
    "year": 2026,
-   "trim": "350 AWD"
+   "trim": "350 AWD",
+   "dims": {
+    "lengthIn": 183.5,
+    "widthIn": 73.4,
+    "heightIn": 66.1,
+    "wheelbaseIn": 105.9,
+    "groundClearanceIn": 8.1,
+    "turningCircleFt": 38.0,
+    "cargoBehind2ndCuFt": 22.7,
+    "cargoMaxCuFt": 46.9
+   },
+   "ease": {
+    "climateControls": "mixed",
+    "volumeKnob": true,
+    "gearSelector": "console shifter",
+    "reviewEaseNote": "touch-sensitive steering-wheel controls without haptic feedback are frustrating at first (JD Power); CR calls the shifter unintuitive"
+   }
   },
   {
    "id": "xt5",
@@ -849,7 +993,23 @@
    },
    "reliability": "Reliability: More reliable than other 2023 models (Consumer Reports)",
    "year": 2023,
-   "trim": "Premium Luxury AWD"
+   "trim": "Premium Luxury AWD",
+   "dims": {
+    "lengthIn": 189.6,
+    "widthIn": 74.9,
+    "heightIn": 66.1,
+    "wheelbaseIn": 112.5,
+    "groundClearanceIn": 7.8,
+    "turningCircleFt": 38.7,
+    "cargoBehind2ndCuFt": 30.0,
+    "cargoMaxCuFt": 63.0
+   },
+   "ease": {
+    "climateControls": "mixed",
+    "volumeKnob": true,
+    "gearSelector": "console shifter",
+    "reviewEaseNote": "many physical controls kept, giving a more intuitive feel than all-touch rivals (CarGurus); JD Power notes some may not like the electronic shifter"
+   }
   },
   {
    "id": "rdx",
@@ -934,7 +1094,23 @@
    },
    "reliability": "Reliability: About average reliability vs. other 2023 models (Consumer Reports)",
    "year": 2023,
-   "trim": "Technology SH-AWD"
+   "trim": "Technology SH-AWD",
+   "dims": {
+    "lengthIn": 187.4,
+    "widthIn": 74.8,
+    "heightIn": 65.7,
+    "wheelbaseIn": 108.3,
+    "groundClearanceIn": 8.2,
+    "turningCircleFt": 38.9,
+    "cargoBehind2ndCuFt": 29.5,
+    "cargoMaxCuFt": 58.9
+   },
+   "ease": {
+    "climateControls": "physical",
+    "volumeKnob": true,
+    "gearSelector": "push buttons",
+    "reviewEaseNote": "the touchpad for the screen is frustrating and the push-button shifter isn’t intuitive (Cars.com)"
+   }
   }
  ]
 }
