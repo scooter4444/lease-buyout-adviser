@@ -199,3 +199,17 @@ test('lease extra cash is capped so a stacked mistake can’t erase the payments
   assert.ok(plain > 330 && plain < 420, `plain ${plain}`);
   assert.ok(m(7000) > 199 * 0.75 * 1.0, `capped ${m(7000)}`); // payments can only drop by a quarter
 });
+
+test('a junk listing price (a deposit or payment) is never used as the car’s price', async () => {
+  const { analyze } = await import('../public/engine.js');
+  const base = { assumptions: { state: 'FL', zip: '34287', horizonYears: 3 }, current: { make: 'Ford', model: 'Edge', year: 2024, buyoutPrice: 24481, marketValue: 26000, leaseEndDate: '2027-01-20' } };
+  const r = analyze({ ...base, candidates: [
+    { id: 'sf', make: 'Hyundai', model: 'Santa Fe', year: 2026, msrp: 48623, sellingPrice: 998, buy: { enabled: true }, lease: { enabled: true } },
+    { id: 'bz', make: 'Chevrolet', model: 'Blazer', year: 2026, msrp: 2811, sellingPrice: 2811, buy: { enabled: true }, lease: { enabled: true } },
+  ] });
+  const sf = r.scenarios.filter((s) => s.candidateId === 'sf');
+  assert.ok(sf.length && sf.every((s) => s.monthly > 300), JSON.stringify(sf.map((s) => s.monthly)));
+  assert.equal(r.scenarios.filter((s) => s.candidateId === 'bz').length, 0);
+  assert.ok(r.warnings.some((w) => /Santa Fe.*looked wrong/.test(w)));
+  assert.ok(r.warnings.some((w) => /Blazer.*needs a price/.test(w)));
+});

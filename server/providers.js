@@ -228,6 +228,14 @@ async function comparables({ year, make, model, trim, miles, zip }) {
   return { ok: false, error: (mcTry.ok ? adTry.error : mcTry.error) || { provider: 'app', status: 404, message: 'No comparable listings found' } };
 }
 
+// Listing feeds sometimes carry a deposit, a monthly payment or a placeholder as the price.
+// Keep realistic prices, then drop anything far below the rest.
+function plausible(list, type) {
+  const floor = type === 'new' ? 10000 : 2000;
+  const ok = list.filter((l) => Number(l.price) >= floor && Number(l.price) <= 500000 && !(l.msrp > 0 && l.price < 0.5 * l.msrp));
+  const mid = median(ok.map((l) => Number(l.price)));
+  return mid ? ok.filter((l) => l.price >= 0.6 * mid) : ok;
+}
 function slimListing(l) {
   return {
     vin: l.vin,
@@ -259,7 +267,7 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100,
     stats: type === 'new' ? 'price,msrp' : 'price,msrp,miles', rows: 12, sort_by: 'price', sort_order: 'asc', include_build_object: true,
   }, 12 * 3600));
   if (r.ok) {
-    const L = (r.data?.listings || []).map(slimListing);
+    const L = plausible((r.data?.listings || []).map(slimListing), type);
     const priceMed = r.data?.stats?.price?.median || median(L.map((l) => l.price));
     const msrpMed = r.data?.stats?.msrp?.median || median(L.map((l) => l.msrp));
     const mpg = median(L.map((l) => l.mpg));
@@ -282,7 +290,9 @@ export async function newCarMarket({ year, make, model, trim, zip, radius = 100,
     'vehicle.make': make, 'vehicle.model': model, 'vehicle.year': year || undefined, zip, distance: radius, limit: 20, sort: 'price.asc',
   }, 12 * 3600));
   if (a.ok) {
-    const rows = (a.data?.data || []).filter((l) => (type === 'new' ? !l.retailListing?.used : type === 'certified' ? l.retailListing?.cpo : l.retailListing?.used));
+    const rows0 = (a.data?.data || []).filter((l) => (type === 'new' ? !l.retailListing?.used : type === 'certified' ? l.retailListing?.cpo : l.retailListing?.used));
+    const keep = new Set(plausible(rows0.map((l) => ({ price: l.retailListing?.price, ref: l })), type).map((x) => x.ref));
+    const rows = rows0.filter((l) => keep.has(l));
     const prices = rows.map((l) => l.retailListing?.price).filter((p) => p > 0);
     return {
       source: 'auto.dev',

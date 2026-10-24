@@ -263,9 +263,16 @@ export function normalize(input = {}) {
   const candidates = (input.candidates || []).filter(Boolean).map((v, i) => {
     const vmake = v.make || '';
     const vlux = bool(v.luxury, LUXURY_MAKES.has(vmake.toLowerCase()));
-    const vmsrp = num(v.msrp, 0) || num(v.sellingPrice, 0);
-    const price = num(v.sellingPrice, 0) || vmsrp;
     const condition = ['used', 'certified'].includes(v.condition) ? v.condition : 'new';
+    // Listing feeds sometimes report a deposit or a monthly payment as the price. A new car under
+    // $10k (used under $2k), or a price under half the sticker, isn't a real price: don't price off it.
+    const floor = condition === 'new' ? 10000 : 2000;
+    const msrpIn = num(v.msrp, 0), priceIn = num(v.sellingPrice, 0);
+    const msrpOk = msrpIn >= floor ? msrpIn : 0;
+    const priceOk = priceIn >= floor && !(msrpOk && priceIn < 0.5 * msrpOk) ? priceIn : 0;
+    const priceSuspect = (priceIn > 0 && !priceOk) || (msrpIn > 0 && !msrpOk);
+    const vmsrp = msrpOk || priceOk;
+    const price = priceOk || vmsrp;
     const vyear = num(v.year, today.getFullYear() + 1);
     const used = condition !== 'new';
     return {
@@ -279,6 +286,7 @@ export function normalize(input = {}) {
       luxury: vlux,
       msrp: vmsrp,
       sellingPrice: price,
+      priceSuspect,
       mpg: num(v.mpg, 30),
       insuranceAnnual: v.insuranceAnnual !== undefined && v.insuranceAnnual !== '' ? num(v.insuranceAnnual) : null,
       registrationAnnual: v.registrationAnnual,
@@ -637,6 +645,7 @@ export function analyze(input) {
 
   if (n.current.buyoutPrice > 0 && n.current.marketValueNow > 0) scenarios.push(buyoutScenario(n, H));
   for (const v of n.candidates) {
+    if (v.priceSuspect) warnings.push(`${v.label}: the listed price looked wrong${v.sellingPrice > 0 ? ', so it’s priced at the sticker price' : ''}. Refresh its price.`);
     if (!(v.sellingPrice > 0)) { warnings.push(`${v.label}: needs a price.`); continue; }
     if (v.buy.enabled) scenarios.push(buyNewScenario(n, v, H, exit));
     if (v.lease.enabled) scenarios.push(leaseNewScenario(n, v, H, exit));

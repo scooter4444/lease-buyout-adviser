@@ -828,6 +828,16 @@ function afterLoad() {
     fixed = fixedPhotos(id, p) || fixed; fixed = knownHousehold(id, p) || fixed; fixed = knownPlaces(id, p) || fixed;
     // Stacking rules changed (no public rebates on advertised leases): re-pick saved offers once.
     if ((p.stackVersion || 0) < 2) { for (const c of p.candidates || []) if (c.offers?.length && !c.userPicked) c.needsPick = true; p.stackVersion = 2; fixed = true; }
+    // Junk listing prices (a $998 "price" on a $48k car) got saved while MarketCheck was out: clear them.
+    if ((p.stackVersion || 0) < 3) {
+      for (const c of p.candidates || []) {
+        const floor = c.condition && c.condition !== 'new' ? 2000 : 10000;
+        const msrp = Number(c.msrp) || 0, price = Number(c.sellingPrice) || 0;
+        if (msrp && msrp < floor) c.msrp = '';
+        if (price && (price < floor || (Number(c.msrp) && price < 0.5 * Number(c.msrp)))) { c.sellingPrice = c.msrp || ''; c.status = 'The listed price looked wrong. Tap Refresh prices when you can.'; c.needsPick = !!c.offers?.length; }
+      }
+      p.stackVersion = 3; fixed = true;
+    }
   }
   if (fixed) setTimeout(() => persist(), 0);
   for (const p of Object.values(store.profiles)) {
