@@ -395,6 +395,7 @@ function compareChart(priced, buyout) {
 
 function renderModels() {
   renderCompare3Tab();
+  renderPnd();
   renderIdeas();
   renderDeals();
   const seg = state.segment || segmentFor({ make: state.current.make, model: state.current.model, body: state.lookup?.vehicle?.body });
@@ -1296,6 +1297,70 @@ function renderDeals() {
   };
 }
 
+// ---------- Leasehackr pre-negotiated deals (data/pnd.json) ----------
+let pnd = null, pndState = null;
+async function loadPnd() {
+  if (pnd) return pnd;
+  try { pnd = await (await fetch('data/pnd.json')).json(); } catch { pnd = { deals: [] }; }
+  return pnd;
+}
+function pndOffer(d) {
+  return { id: `pnd-${d.id}`, make: d.make, model: d.model, year: d.year, trim: d.trim, msrp: d.msrp || Math.round(d.monthly * 95), monthly: d.monthly, term: d.term, dueAtSigning: d.due, mileageLimit: d.miles || 7500, overMileageFee: 0.2, dispositionFee: 395 };
+}
+function renderPnd() {
+  const box = $('#pnd');
+  if (!box) return;
+  if (!pnd) { loadPnd().then(() => renderPnd()); return; }
+  const states = ['FL', 'MI', 'CO'];
+  pndState ||= states.includes(state.assumptions.state) ? state.assumptions.state : 'FL';
+  $('#pndStates').innerHTML = states.map((st) => `<button type="button" data-st="${st}" aria-pressed="${st === pndState}">${{ FL: 'Florida', MI: 'Michigan', CO: 'Colorado' }[st]}</button>`).join('');
+  const suv = $('#pndSuv').checked, sold = $('#pndSold').checked;
+  const buyout = lastAnalysis?.scenarios?.find((x) => x.kind === 'buyout');
+  const have = new Set(state.candidates.map((c) => c.pnd).filter(Boolean));
+  const rows = (pnd.deals || [])
+    .filter((d) => d.monthly && d.term && d.due != null && (!suv || d.body === 'suv') && (sold || d.left !== 0) && d.eligible?.[pndState] !== false)
+    .map((d) => ({ d, s: dealScenario(pndOffer(d)) })).filter((x) => x.s)
+    .sort((a, b) => a.s.monthly - b.s.monthly);
+  const unknown = rows.filter((x) => x.d.eligible?.[pndState] == null).length;
+  $('#pndIntro').textContent = `${rows.length} deals that can be registered in ${{ FL: 'Florida', MI: 'Michigan', CO: 'Colorado' }[pndState]}, from Leasehackr on ${pnd.checked || ''} (${pnd.deals.length} of the ${pnd.total_on_site || '?'} on the site). Counted like everything else, at ${Number(state.assumptions.annualMiles || 12000).toLocaleString()} miles a year.${unknown ? ` ${unknown} don’t list their registration states; confirm with the broker.` : ''}`;
+  $('#pndList').innerHTML = rows.length ? rows.map(({ d, s }) => {
+    const diff = buyout ? s.monthly - buyout.monthly : null;
+    const tags = [
+      d.eligible?.[pndState] == null ? 'Registration states not listed' : '',
+      d.program ? `${money(d.program[0])}/mo with ${d.program[1]}` : '',
+      d.left === 0 ? 'Sold out' : d.left ? `${d.left} left` : '',
+      d.expires ? `Ends ${new Date(`${d.expires}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '',
+      `${d.dealer} dealer`, d.note || '',
+    ].filter(Boolean);
+    const added = have.has(d.id);
+    return `<li>${logoHTML(d.make, 'deal')}<div class="dl-name"><b>${esc(`${d.year} ${d.make} ${d.model}`)}</b><small>${esc([d.trim, d.msrp ? `MSRP ${money(d.msrp)}` : ''].filter(Boolean).join(', '))}</small></div>
+      <div class="dl-cost"><b>${money(s.monthly)}</b><small>a month</small></div>
+      <div class="dl-terms"><span>${money(d.monthly)}/mo${d.plusTax ? ' + tax' : ''} + ${money(d.due)} due</span><span>${d.term} months, ${((d.miles || 7500) / 1000).toFixed(1).replace('.0', '')}k mi/yr</span>${diff != null ? `<span class="${diff > 0 ? 'neg' : 'pos'}">${diff > 0 ? `${money(diff)}/mo more` : `${money(-diff)}/mo less`} than buying out</span>` : ''}${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
+      <button type="button" class="btn small ${added ? 'ghost' : ''}" data-pnd="${esc(d.id)}" ${added || d.left === 0 ? 'disabled' : ''}>${added ? 'In compare' : d.left === 0 ? 'Sold out' : 'Add to compare'}</button></li>`;
+  }).join('') : '<p class="hint">No deals here for that state yet.</p>';
+  if (!box.dataset.wired) {
+    box.dataset.wired = '1';
+    box.addEventListener('click', (e) => {
+      const st = e.target.closest('[data-st]');
+      if (st) { pndState = st.dataset.st; renderPnd(); return; }
+      const b = e.target.closest('[data-pnd]');
+      if (!b) return;
+      const d = pnd.deals.find((x) => x.id === b.dataset.pnd);
+      const o = pndOffer(d);
+      // The deal's own terms, not market estimates: this is the price Leasehackr's broker quotes.
+      state.candidates.push(blankCandidate({
+        year: String(d.year), make: d.make, model: d.model, trim: d.trim, msrp: String(o.msrp), sellingPrice: String(o.msrp), pnd: d.id, userPicked: true,
+        reason: `Leasehackr deal: ${money(d.monthly)}/mo + ${money(d.due)} due, ${d.term} mo`,
+        buy: { enabled: false, rebate: '', apr: '', termMonths: '60', downPayment: '', payCash: false, source: 'estimate' },
+        lease: { enabled: true, monthly: String(d.monthly), termMonths: String(d.term), dueAtSigning: String(d.due), annualMileage: String(d.miles || 7500), overMileageFee: '0.20', dispositionFee: '395', residualPct: '', moneyFactor: '', source: 'offer', offerLabel: 'Leasehackr' },
+      }));
+      persist(); renderResults(); renderModels(); ensurePhotos();
+      toast(`Added the ${d.make} ${d.model} deal`);
+    });
+    box.addEventListener('change', (e) => { if (e.target.matches('#pndSuv, #pndSold')) renderPnd(); });
+  }
+}
+
 // What the dealer would quote, in words: "$423/mo, $4,919 due" or "$811/mo for 60 mo".
 // ---------- By where it's registered ----------
 // Re-runs the comparison as if the car were registered at each ZIP: that state's taxes and fees,
@@ -1664,7 +1729,7 @@ function applySelection(c) {
   c.buy = { ...c.buy, rebate: total ? String(total) : '', apr: fin ? String(fin.apr) : '', termMonths: fin ? String(fin.term || 60) : '60', source: total || fin ? 'offer' : 'estimate' };
   const lease = (c.offers || []).find((o) => o.id === sel.lease);
   if (lease) applyLeaseOffer(c, lease);
-  else if (c.lease.source === 'offer') c.lease = { ...c.lease, monthly: '', dueAtSigning: '', moneyFactor: '', residualPct: '', source: 'estimate' };
+  else if (c.lease.source === 'offer' && !c.pnd) c.lease = { ...c.lease, monthly: '', dueAtSigning: '', moneyFactor: '', residualPct: '', source: 'estimate' }; // a Leasehackr deal keeps its quoted terms
   const leaseCash = (c.offers || []).filter((o) => (sel.leaseCash || []).includes(o.id)).reduce((t, o) => t + (o.cashback || 0), 0);
   c.lease = { ...c.lease, addOnCash: leaseCash ? String(leaseCash) : '' };
   const named = (ids) => (c.offers || []).filter((o) => ids.includes(o.id)).map((o) => `${money(o.cashback)} ${cashLabel(o)}${sel.why?.[o.id] ? ` (${sel.why[o.id]})` : ''}`);

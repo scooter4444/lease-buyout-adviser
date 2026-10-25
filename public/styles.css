@@ -836,3 +836,11 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
 .c3-links .c3-cell { gap: 6px; }
 .c3-links .btn { width: 100%; padding-inline: 6px; }
 .c3 .fine { margin: 0; font-size: 0.75rem; color: var(--ink-soft); }
+/* Leasehackr deals */
+.pnd-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.pnd-head h2 { font-size: 1.2rem; font-variation-settings: 'wdth' 118; }
+.pnd-head a { font-size: 0.8rem; }
+.pnd-tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 10px 0 12px; }
+.pnd-tools .seg-ctl button { border: 0; background: transparent; font: 500 0.8rem var(--wide); color: var(--ink-soft); height: 32px; padding: 0 12px; border-radius: 999px; cursor: pointer; }
+.pnd-tools .seg-ctl button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(20, 33, 61, 0.14); }
+.pnd .deal-list .tag { white-space: normal; }
