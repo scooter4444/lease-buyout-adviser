@@ -1322,7 +1322,9 @@ function renderPnd() {
     .map((d) => ({ d, s: dealScenario(pndOffer(d)) })).filter((x) => x.s)
     .sort((a, b) => a.s.monthly - b.s.monthly);
   const unknown = rows.filter((x) => x.d.eligible?.[pndState] == null).length;
-  $('#pndIntro').textContent = `${rows.length} deals that can be registered in ${{ FL: 'Florida', MI: 'Michigan', CO: 'Colorado' }[pndState]}, from Leasehackr on ${pnd.checked || ''} (${pnd.deals.length} of the ${pnd.total_on_site || '?'} on the site). Counted like everything else, at ${Number(state.assumptions.annualMiles || 12000).toLocaleString()} miles a year.${unknown ? ` ${unknown} don’t list their registration states; confirm with the broker.` : ''}`;
+  const stName = { FL: 'Florida', MI: 'Michigan', CO: 'Colorado' }[pndState];
+  const listed = pnd.lists?.[pndState];
+  $('#pndIntro').textContent = `${listed ? `Leasehackr lists ${listed} deals for ${stName} residents` : `${stName}’s list hasn’t been saved yet, so these are deals that might qualify`} (checked ${pnd.checked || ''}). Showing ${rows.length}${suv ? ' SUVs' : ''}${sold ? '' : ' still available'}, costed like everything else at ${Number(state.assumptions.annualMiles || 12000).toLocaleString()} miles a year.${unknown ? ` ${unknown} don’t list their registration states; confirm with the broker.` : ''}`;
   $('#pndList').innerHTML = rows.length ? rows.map(({ d, s }) => {
     const diff = buyout ? s.monthly - buyout.monthly : null;
     const tags = [
