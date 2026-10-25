@@ -571,7 +571,9 @@
     "MI": false,
     "CO": false
    },
-   "note": ""
+   "note": "",
+   "best": true,
+   "why": "Lowest-cost SUV a size down from her Edge"
   },
   {
    "id": "2026-hyundai-tucson-sel-fwd-275-36",
@@ -973,7 +975,9 @@
     "MI": false,
     "CO": null
    },
-   "note": ""
+   "note": "",
+   "best": true,
+   "why": "Closest to her Edge\u2019s size for the least money; 10,000 miles a year included"
   },
   {
    "id": "2026-mercedes-benz-glb-250-suv-339-24",
@@ -1079,7 +1083,9 @@
     "MI": false,
     "CO": null
    },
-   "note": ""
+   "note": "",
+   "best": true,
+   "why": "Edge-sized, 10,000 miles a year included"
   },
   {
    "id": "2026-mazda-cx-70-phev-sc-plus-awd-plug-in-hybrid-349-36",
@@ -1107,7 +1113,9 @@
     "MI": false,
     "CO": null
    },
-   "note": ""
+   "note": "",
+   "best": true,
+   "why": "All-wheel-drive plug-in hybrid at a mid-size price"
   },
   {
    "id": "2026-jeep-wrangler-sport-s-4wd-4-door-359-42",
@@ -1409,7 +1417,9 @@
     "MI": false,
     "CO": null
    },
-   "note": ""
+   "note": "",
+   "best": true,
+   "why": "Mercedes-Benz luxury sedan for under $400 a month"
   },
   {
    "id": "2026-hyundai-palisade-hybrid-blue-sel-7p-fwd-399-24",
@@ -1490,7 +1500,9 @@
     "MI": false,
     "CO": null
    },
-   "note": "IIHS 2026 Top Safety Pick+ (built after Nov 2025)"
+   "note": "IIHS 2026 Top Safety Pick+ (built after Nov 2025)",
+   "best": true,
+   "why": "IIHS Top Safety Pick+, three rows, 3 years and 10,000 miles a year"
   },
   {
    "id": "2026-jeep-wrangler-sahara-4-door-4x4-415-42",
@@ -1755,7 +1767,9 @@
     "MI": true,
     "CO": null
    },
-   "note": ""
+   "note": "",
+   "best": true,
+   "why": "Luxury two-row with all-wheel drive; 10,000 miles a year included"
   },
   {
    "id": "2027-hyundai-ioniq-5-sel-rwd-473-36",
@@ -2929,5 +2943,14 @@
    },
    "note": ""
   }
+ ],
+ "picksOrder": [
+  "2027-hyundai-santa-fe-sel-fwd-322-36",
+  "2026-kia-sorento-s-fwd-349-36",
+  "2027-hyundai-palisade-sel-7p-fwd-410-36",
+  "2026-hyundai-tucson-sel-premium-fwd-269-36",
+  "2026-mazda-cx-70-phev-sc-plus-awd-plug-in-hybrid-349-36",
+  "2027-infiniti-qx65-luxe-awd-439-24",
+  "2026-mercedes-benz-c-300-sedan-rwd-399-24"
  ]
 }

@@ -525,11 +525,14 @@ function buildList(ctx) {
   const seen = new Set(), list = [];
   const add = (car, mine) => {
     if (!car?.make || !car?.model) return;
-    const k = `${norm(car.make)}|${norm(car.model)}`;
+    // A Leasehackr deal is its own option even when the same model is already on the list.
+    const k = car.pnd ? `pnd:${car.pnd}` : `${norm(car.make)}|${norm(car.model)}`;
     if (seen.has(k)) return;
     seen.add(k);
     const rec = recordFor(car, ctx);
-    list.push({ mine, car, rec, photoHTML: ctx.photoHTML(car, mine), sub: ctx.sub(car, mine, rec), cost: ctx.costFor ? ctx.costFor(car, mine) : null });
+    const key = mine ? 'mine' : car.pnd ? car.id : rec.id;
+    const label = mine ? `Her ${rec.year} ${rec.model}` : `${car.make} ${car.model}${car.pnd ? ' deal' : ''}`;
+    list.push({ mine, car, rec, key, label, photoHTML: ctx.photoHTML(car, mine), sub: ctx.sub(car, mine, rec), cost: ctx.costFor ? ctx.costFor(car, mine) : null });
   };
   add(ctx.current, true);
   for (const c of ctx.candidates) add(c, false);
@@ -579,9 +582,9 @@ export function renderCompare3(el, ctx) {
   const mine = list.find((x) => x.mine);
   const others = list.filter((x) => !x.mine);
   if (!mine || !others.length) { el.innerHTML = ''; return; }
-  let picks = (ctx.prefs.compare || []).filter((id) => others.some((x) => x.rec.id === id));
-  if (!picks.length) picks = others.slice(0, 2).map((x) => x.rec.id);
-  const cols = [mine, ...picks.map((id) => others.find((x) => x.rec.id === id))].filter(Boolean);
+  let picks = (ctx.prefs.compare || []).filter((id) => others.some((x) => x.key === id));
+  if (!picks.length) picks = others.slice(0, 2).map((x) => x.key);
+  const cols = [mine, ...picks.map((id) => others.find((x) => x.key === id))].filter(Boolean);
   const want = new Set(ctx.prefs.want || DEFAULT_WANT);
   const rows = c3Rows(want).map((R) => {
     if (R.h) return `<div class="c3-h" role="row"><span role="columnheader">${esc(R.h)}</span></div>`;
@@ -597,12 +600,12 @@ export function renderCompare3(el, ctx) {
   el.innerHTML = `
     <div class="c3-intro"><h2>Up to three, side by side</h2><p>Her Edge stays first. Pick two more.</p></div>
     <div class="s-chips scroll" role="group" aria-label="Cars to compare">
-      ${others.map((x) => { const on = picks.includes(x.rec.id); return `<button type="button" class="s-chip" data-c3="pick" data-k="${esc(x.rec.id)}" aria-pressed="${on}">${on ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>' : ''}${esc(`${x.rec.make} ${x.rec.model}`)}</button>`; }).join('')}
+      ${others.map((x) => { const on = picks.includes(x.key); return `<button type="button" class="s-chip" data-c3="pick" data-k="${esc(x.key)}" aria-pressed="${on}">${on ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>' : ''}${esc(x.label)}</button>`; }).join('')}
     </div>
     <div class="c3-table" role="table" aria-label="Side by side comparison" style="--cols:${cols.length}">
       <div class="c3-top" role="row">
         <span class="sr-only" role="columnheader">Item</span>
-        ${cols.map((x) => `<div class="c3-car" role="columnheader"><div class="s-pic">${x.photoHTML}</div>${ctx.logoHTML(x.rec.make, 'inline')}<b>${esc(x.mine ? `Her ${x.rec.year} ${x.rec.model}` : `${x.rec.make} ${x.rec.model}`)}</b></div>`).join('')}
+        ${cols.map((x) => `<div class="c3-car" role="columnheader"><div class="s-pic">${x.photoHTML}</div>${ctx.logoHTML(x.rec.make, 'inline')}<b>${esc(x.mine ? `Her ${x.rec.year} ${x.rec.model}` : `${x.car.make} ${x.car.model}`)}</b>${x.car.pnd ? '<small class="c3-tag">Leasehackr deal</small>' : ''}</div>`).join('')}
       </div>
       ${rows}
       <div class="c3-row c3-links" role="row">
@@ -627,5 +630,5 @@ export function renderCompare3(el, ctx) {
       else if (b.dataset.c3 === 'tests') { ui.tests = k; ui.view = 'tests'; c.openSafety(); }
     });
   }
-  el._ctx = ctx; el._others = others.map((x) => x.rec.id); el._picks = picks;
+  el._ctx = ctx; el._others = others.map((x) => x.key); el._picks = picks;
 }

@@ -743,7 +743,7 @@ let saveTimer;
 function snapshot() {
   const profiles = {};
   for (const [id, p] of Object.entries(store.profiles)) {
-    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, safetyPrefs: p.safetyPrefs, stackVersion: p.stackVersion, regionInfo: p.regionInfo, needsOfferRefresh: p.needsOfferRefresh, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
+    profiles[id] = { name: p.name, pricing: p.pricing, segment: p.segment, photo: p.photo, suggested: p.suggested, lastVerdict: p.lastVerdict, repricedAt: p.repricedAt, repriceLog: p.repriceLog, needsVerdictCheck: p.needsVerdictCheck, repriceNotice: p.repriceNotice, assumptions: p.assumptions, eligibility: p.eligibility, safetyPrefs: p.safetyPrefs, stackVersion: p.stackVersion, dealsVersion: p.dealsVersion, regionInfo: p.regionInfo, needsOfferRefresh: p.needsOfferRefresh, current: p.current, candidates: p.candidates.map(({ status, statusErr, ...c }) => c), lookup: p.lookup };
   }
   return JSON.stringify({ active: store.active, rev: store.rev || 0, profiles });
 }
@@ -775,6 +775,7 @@ function hydrate(p) {
     regionInfo: { ...(p.regionInfo || {}) },
     safetyPrefs: { ...(p.safetyPrefs || {}) },
     stackVersion: p.stackVersion || 0,
+    dealsVersion: p.dealsVersion || 0,
     needsOfferRefresh: !!p.needsOfferRefresh,
     current: { ...b.current, ...p.current },
     candidates: (p.candidates || []).map((c) => blankCandidate({ ...c, buy: { ...blankCandidate().buy, ...c.buy }, lease: { ...blankCandidate().lease, ...c.lease } })),
@@ -823,6 +824,20 @@ function fixedPhotos(id, p) {
   if (isCarols && /ford/i.test(p.current?.make || '') && /edge/i.test(p.current?.model || '') && p.photo?.fixed !== 'white-edge') { p.photo = { ...WHITE_EDGE }; return true; }
   return false;
 }
+const pendingPicks = [];
+async function applyPendingPicks() {
+  if (!pendingPicks.length) return;
+  await loadPnd();
+  for (const p of pendingPicks.splice(0)) {
+    const added = addPndDeals(p, pnd.picksOrder || []);
+    p.safetyPrefs ||= {};
+    const byId = (pid) => p.candidates.find((c) => c.pnd === pid)?.id;
+    const want = [byId('2027-hyundai-santa-fe-sel-fwd-322-36'), byId('2026-mercedes-benz-c-300-sedan-rwd-399-24')].filter(Boolean);
+    if (want.length) p.safetyPrefs.compare = want;
+    p.dealsVersion = 1;
+    if (added.length || want.length) { persist(); if (p === state) { renderResults(); renderModels(); ensurePhotos(); } }
+  }
+}
 function afterLoad() {
   let fixed = false;
   for (const [id, p] of Object.entries(store.profiles)) {
@@ -830,6 +845,7 @@ function afterLoad() {
     // Stacking rules changed (no public rebates on advertised leases): re-pick saved offers once.
     if ((p.stackVersion || 0) < 2) { for (const c of p.candidates || []) if (c.offers?.length && !c.userPicked) c.needsPick = true; p.stackVersion = 2; fixed = true; }
     // Junk listing prices (a $998 "price" on a $48k car) got saved while MarketCheck was out: clear them.
+    if ((p.dealsVersion || 0) < 1 && /carol/i.test(`${id} ${p.name || ''}`)) { pendingPicks.push(p); }
     if ((p.stackVersion || 0) < 3) {
       for (const c of p.candidates || []) {
         const floor = c.condition && c.condition !== 'new' ? 2000 : 10000;
@@ -841,6 +857,7 @@ function afterLoad() {
     }
   }
   if (fixed) setTimeout(() => persist(), 0);
+  setTimeout(() => applyPendingPicks(), 0);
   for (const p of Object.values(store.profiles)) {
     for (const c of p.candidates) if (c.needsPick) { const keep = state; state = p; autoPick(c); state = keep; delete c.needsPick; }
     if (p.needsVerdictCheck) {
@@ -1305,6 +1322,26 @@ async function loadPnd() {
   try { pnd = await (await fetch('data/pnd.json')).json(); } catch { pnd = { deals: [] }; }
   return pnd;
 }
+function pndCandidate(d) {
+  const msrp = d.msrp || Math.round(d.monthly * 95);
+  return blankCandidate({
+    year: String(d.year), make: d.make, model: d.model, trim: d.trim, msrp: String(msrp), sellingPrice: String(msrp), pnd: d.id, userPicked: true,
+    reason: `Leasehackr deal: ${money(d.monthly)}/mo + ${money(d.due ?? 0)} due, ${d.term} mo${d.why ? `. ${d.why}` : ''}`,
+    buy: { enabled: false, rebate: '', apr: '', termMonths: '60', downPayment: '', payCash: false, source: 'estimate' },
+    lease: { enabled: true, monthly: String(d.monthly), termMonths: String(d.term), dueAtSigning: d.due != null ? String(d.due) : '', annualMileage: String(d.miles || 7500), overMileageFee: '0.20', dispositionFee: '395', residualPct: '', moneyFactor: '', source: 'offer', offerLabel: 'Leasehackr' },
+  });
+}
+function addPndDeals(p, ids) {
+  const have = new Set(p.candidates.map((c) => c.pnd).filter(Boolean));
+  const added = [];
+  for (const id of ids) {
+    const d = pnd?.deals.find((x) => x.id === id);
+    if (!d || have.has(id) || d.left === 0) continue;
+    const c = pndCandidate(d);
+    p.candidates.push(c); added.push(c);
+  }
+  return added;
+}
 function pndOffer(d) {
   return { id: `pnd-${d.id}`, make: d.make, model: d.model, year: d.year, trim: d.trim, msrp: d.msrp || Math.round(d.monthly * 95), monthly: d.monthly, term: d.term, dueAtSigning: d.due ?? d.monthly, mileageLimit: d.miles || 7500, overMileageFee: 0.2, dispositionFee: 395 };
 }
@@ -1332,12 +1369,15 @@ function renderPnd() {
   const stName = { FL: 'Florida', MI: 'Michigan', CO: 'Colorado' }[pndState];
   const listed = pnd.lists?.[pndState];
   $('#pndIntro').textContent = `${listed ? `Leasehackr lists ${listed} deals for ${stName} residents` : `${stName}’s list hasn’t been saved yet, so these are deals that might qualify`} (checked ${pnd.checked || ''}). Showing ${rows.length}${suv ? ' SUVs' : ''}${sold ? '' : ' still available'}, costed like everything else (taxes, fees, money due up front spread over the lease) ${pndBasis === 'quoted' ? 'at each deal’s own mileage' : `at her ${herMiles.toLocaleString()} miles a year, with extra miles charged`}.${unknown ? ` ${unknown} don’t list their registration states; confirm with the broker.` : ''}`;
-  $('#pndList').innerHTML = rows.length ? rows.map(({ d, s, quoted, hers }) => {
+  const picks = (pnd.picksOrder || []).map((id) => pnd.deals.find((x) => x.id === id)).filter((d) => d && d.left !== 0 && d.eligible?.[pndState] !== false);
+  const picksIn = picks.filter((d) => have.has(d.id)).length;
+  $('#pndList').innerHTML = (picks.length ? `<li class="pnd-picks"><div><b>Leasehackr picks for Carol</b><small>${esc(picks.map((d) => `${d.make} ${d.model}`).join(', '))}</small></div><button type="button" class="btn small ${picksIn === picks.length ? 'ghost' : 'primary'}" data-pnd="*picks" ${picksIn === picks.length ? 'disabled' : ''}>${picksIn === picks.length ? 'All in compare' : `Add ${picks.length - picksIn} to compare`}</button></li>` : '') + (rows.length ? rows.map(({ d, s, quoted, hers }) => {
     const diff = buyout ? s.monthly - buyout.monthly : null;
     const tags = [
       d.eligible?.[pndState] == null ? 'Registration states not listed' : '',
       d.due == null ? 'Due up front not shown on the list' : '',
       d.body !== 'suv' ? { car: 'Car', truck: 'Pickup', van: 'Minivan' }[d.body] : '',
+      d.best ? `Pick: ${d.why}` : '',
       d.program ? `${money(d.program[0])}/mo with ${d.program[1]}` : '',
       d.left === 0 ? 'Sold out' : d.left ? `${d.left} left` : '',
       d.expires ? `Ends ${new Date(`${d.expires}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : '',
@@ -1348,7 +1388,7 @@ function renderPnd() {
       <div class="dl-cost"><b>${money(s.monthly)}</b><small>${pndBasis === 'quoted' ? `a month at ${((d.miles || 7500) / 1000).toFixed(1).replace('.0', '')}k mi` : `a month at ${(herMiles / 1000).toFixed(herMiles % 1000 ? 1 : 0)}k mi`}</small>${hers && quoted && Math.round(hers.monthly) !== Math.round(quoted.monthly) ? `<small>${money(pndBasis === 'quoted' ? hers.monthly : quoted.monthly)} ${pndBasis === 'quoted' ? `at her ${(herMiles / 1000).toFixed(herMiles % 1000 ? 1 : 0)}k` : 'as quoted'}</small>` : ''}</div>
       <div class="dl-terms"><span>${money(d.monthly)}/mo${d.plusTax ? ' + tax' : ''} + ${money(d.due)} due</span><span>${d.term} months, ${((d.miles || 7500) / 1000).toFixed(1).replace('.0', '')}k mi/yr</span>${diff != null ? `<span class="${diff > 0 ? 'neg' : 'pos'}">${diff > 0 ? `${money(diff)}/mo more` : `${money(-diff)}/mo less`} than buying out</span>` : ''}${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
       <button type="button" class="btn small ${added ? 'ghost' : ''}" data-pnd="${esc(d.id)}" ${added || d.left === 0 ? 'disabled' : ''}>${added ? 'In compare' : d.left === 0 ? 'Sold out' : 'Add to compare'}</button></li>`;
-  }).join('') : '<p class="hint">No deals here for that state yet.</p>';
+  }).join('') : '<p class="hint">No deals here for that state yet.</p>');
   if (!box.dataset.wired) {
     box.dataset.wired = '1';
     box.addEventListener('click', (e) => {
@@ -1358,15 +1398,15 @@ function renderPnd() {
       if (bs) { pndBasis = bs.dataset.basis; renderPnd(); return; }
       const b = e.target.closest('[data-pnd]');
       if (!b) return;
+      if (b.dataset.pnd === '*picks') {
+        const added = addPndDeals(state, pnd.picksOrder || []);
+        persist(); renderResults(); renderModels(); ensurePhotos();
+        toast(added.length ? `Added ${added.length} Leasehackr picks` : 'The picks are already in compare');
+        return;
+      }
       const d = pnd.deals.find((x) => x.id === b.dataset.pnd);
-      const o = pndOffer(d);
       // The deal's own terms, not market estimates: this is the price Leasehackr's broker quotes.
-      state.candidates.push(blankCandidate({
-        year: String(d.year), make: d.make, model: d.model, trim: d.trim, msrp: String(o.msrp), sellingPrice: String(o.msrp), pnd: d.id, userPicked: true,
-        reason: `Leasehackr deal: ${money(d.monthly)}/mo + ${money(d.due)} due, ${d.term} mo`,
-        buy: { enabled: false, rebate: '', apr: '', termMonths: '60', downPayment: '', payCash: false, source: 'estimate' },
-        lease: { enabled: true, monthly: String(d.monthly), termMonths: String(d.term), dueAtSigning: d.due != null ? String(d.due) : '', annualMileage: String(d.miles || 7500), overMileageFee: '0.20', dispositionFee: '395', residualPct: '', moneyFactor: '', source: 'offer', offerLabel: 'Leasehackr' },
-      }));
+      state.candidates.push(pndCandidate(d));
       persist(); renderResults(); renderModels(); ensurePhotos();
       toast(`Added the ${d.make} ${d.model} deal`);
     });

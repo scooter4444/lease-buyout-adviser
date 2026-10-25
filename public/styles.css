@@ -844,3 +844,7 @@ dialog.sheet::backdrop { background: rgba(10, 18, 32, 0.42); }
 .pnd-tools .seg-ctl button { border: 0; background: transparent; font: 500 0.8rem var(--wide); color: var(--ink-soft); height: 32px; padding: 0 12px; border-radius: 999px; cursor: pointer; }
 .pnd-tools .seg-ctl button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(20, 33, 61, 0.14); }
 .pnd .deal-list .tag { white-space: normal; }
+.pnd-picks { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px !important; border-radius: var(--r-md); background: var(--go-tint); border: 0 !important; margin-bottom: 8px; }
+.pnd-picks b { display: block; }
+.pnd-picks small { color: var(--ink-soft); font-size: 0.8rem; }
+.c3-car .c3-tag { font-size: 0.66rem; color: var(--go); font-weight: 600; }
