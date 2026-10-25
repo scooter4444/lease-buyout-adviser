@@ -1111,6 +1111,105 @@
     "gearSelector": "push buttons",
     "reviewEaseNote": "the touchpad for the screen is frustrating and the push-button shifter isn’t intuitive (Cars.com)"
    }
+  },
+  {
+   "id": "c300",
+   "year": 2026,
+   "make": "Mercedes-Benz",
+   "model": "C 300",
+   "trim": "Sedan RWD",
+   "name": "2026 Mercedes-Benz C 300 Sedan RWD",
+   "note": "A sedan, not an SUV: lower to get in and out of, with an 11.6 cu ft trunk against her Edge’s 39 cu ft. NHTSA hasn’t published crash ratings for the current C-Class. Standard pedestrian braking rates Acceptable; the optional Driver Assistance package makes it Good and adds stop-and-go cruise and lane centering. The Leasehackr deal is rear-wheel drive.",
+   "nhtsa": {
+    "overall": null,
+    "frontal": null,
+    "side": null,
+    "rollover": null,
+    "rolloverRiskPct": null,
+    "recalls": 1,
+    "recallTopics": [
+     "Infotainment unit can reset while driving and blank the instrument display (software update)"
+    ],
+    "url": "https://www.nhtsa.gov/ratings"
+   },
+   "iihs": {
+    "award": "TSP",
+    "awardYear": 2026,
+    "url": "https://www.iihs.org/ratings/vehicle/mercedes-benz/c-class/2026",
+    "smallOverlapDriver": "G",
+    "smallOverlapPassenger": "G",
+    "moderateOverlapUpdated": "G",
+    "sideUpdated": "G",
+    "pedestrianAEB": "A",
+    "seatBeltReminders": "G",
+    "latch": "G",
+    "headlights": "G"
+   },
+   "assist": {
+    "aeb": true,
+    "pedestrianAEB": true,
+    "adaptiveCruiseStopGo": "optional",
+    "laneCentering": "optional",
+    "blindSpot": true,
+    "rearCrossTraffic": null,
+    "rearAEB": null,
+    "driverAttention": null
+   },
+   "feat": {
+    "handsFree": false,
+    "handsFreeName": null,
+    "camera360": null,
+    "ventilatedSeats": null,
+    "heatedSeats": true,
+    "heatedWheel": true,
+    "wirelessCarPlay": null,
+    "handsFreeLiftgate": null,
+    "panoramicRoof": "optional",
+    "awd": "optional"
+   },
+   "specs": {
+    "screen": "11.9-in",
+    "cargo": 11.6,
+    "cargoMax": null,
+    "seating": 5,
+    "hp": 255,
+    "mpg": 29,
+    "tow": null
+   },
+   "warranty": "4 yr / 50k",
+   "review": {
+    "source": "Edmunds",
+    "scoreN": 7.1,
+    "score": "7.1",
+    "verdict": "Engaging to drive and full of tech even as the base C 300, but a busy ride and fiddly controls keep it off the top of its class.",
+    "pros": [
+     "Lots of tech, even on the base car",
+     "Roomy and quiet on the highway",
+     "Good fuel economy"
+    ],
+    "cons": [
+     "Ride isn’t as comfortable as a luxury car should be",
+     "Some controls are distracting to use"
+    ],
+    "url": "https://www.edmunds.com/mercedes-benz/c-class"
+   },
+   "reliability": "",
+   "dims": {
+    "lengthIn": 187.0,
+    "widthIn": null,
+    "heightIn": null,
+    "wheelbaseIn": 112.8,
+    "groundClearanceIn": null,
+    "turningCircleFt": 37.6,
+    "cargoBehind2ndCuFt": 11.6,
+    "cargoMaxCuFt": null
+   },
+   "ease": {
+    "climateControls": null,
+    "volumeKnob": null,
+    "gearSelector": "column stalk",
+    "reviewEaseNote": "some controls are distracting to use, and the low seating made getting in and out harder (Edmunds)"
+   }
   }
  ]
 }
