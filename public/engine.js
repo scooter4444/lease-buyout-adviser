@@ -19,8 +19,13 @@ export const STATE_TAX = {
 
 // States that do NOT reduce taxable price by trade-in value.
 export const NO_TRADE_TAX_CREDIT = new Set(['CA', 'HI', 'MD', 'MT', 'VA', 'DC']);
-// Michigan phases its trade-in credit in: capped at $12,000 for 2026 (Treasury).
+// Michigan phases its trade-in credit in, $1,000 more each January 1: capped at $12,000 for
+// purchases in 2026 and $13,000 in 2027 (Treasury).
 export const TRADE_CREDIT_CAP = { MI: 12000 };
+export function tradeCreditCap(state, date = new Date()) {
+  if (state === 'MI') return 12000 + 1000 * Math.max(0, date.getFullYear() - 2026);
+  return TRADE_CREDIT_CAP[state] ?? Infinity;
+}
 
 // Tax and fee details that a flat rate misses, from each state's revenue/DMV guidance (Oct 2026):
 // - FL: 6% state + county surtax that applies only to the first $5,000 of a vehicle sale, but to
@@ -203,7 +208,7 @@ export function normalize(input = {}) {
     tradeInPct: clamp(num(a.tradeInPct, 90), 50, 105),
     titleFees: num(a.titleFees, td.titleFees),
     docFee: num(a.docFee, td.docFee),
-    tradeCreditCap: TRADE_CREDIT_CAP[state] ?? Infinity,
+    tradeCreditCap: tradeCreditCap(state, today),
     gasPrice: num(a.gasPrice, 3.4),
     discountRatePct: clamp(num(a.discountRatePct, 4), 0, 20),
     // How the monthly figure is counted (Settings): 'payments' = what you pay over the period,

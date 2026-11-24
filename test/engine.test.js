@@ -213,3 +213,10 @@ test('a junk listing price (a deposit or payment) is never used as the car’s p
   assert.ok(r.warnings.some((w) => /Santa Fe.*looked wrong/.test(w)));
   assert.ok(r.warnings.some((w) => /Blazer.*needs a price/.test(w)));
 });
+
+test('Michigan trade-in credit cap rises to $13,000 in 2027', async () => {
+  const { tradeCreditCap } = await import('../public/engine.js');
+  assert.equal(tradeCreditCap('MI', new Date('2026-11-23')), 12000);
+  assert.equal(tradeCreditCap('MI', new Date('2027-01-15')), 13000);
+  assert.equal(tradeCreditCap('FL', new Date('2027-01-15')), Infinity);
+});
